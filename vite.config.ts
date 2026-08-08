@@ -31,15 +31,19 @@ export default defineConfig({
         name: 'Sky Dash Shooter',
         short_name: 'SkyDash',
         description: '2D 跑酷/飛機/標靶射擊小遊戲，支援手機與電腦瀏覽器',
-        start_url: '/',
+        // Relative, not root-absolute — GitHub Pages project sites are served from
+        // /repo-name/, not domain root, so "/" would launch the installed PWA at the wrong
+        // URL and the icons below would 404. Relative paths adapt to wherever this is hosted.
+        start_url: './',
+        scope: './',
         display: 'standalone',
         orientation: 'landscape',
         background_color: '#0b0f1a',
         theme_color: '#0b0f1a',
         icons: [
-          { src: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
-          { src: '/icons/icon-512.png', sizes: '512x512', type: 'image/png' },
-          { src: '/icons/icon-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' }
+          { src: './icons/icon-192.png', sizes: '192x192', type: 'image/png' },
+          { src: './icons/icon-512.png', sizes: '512x512', type: 'image/png' },
+          { src: './icons/icon-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' }
         ]
       }
     })
