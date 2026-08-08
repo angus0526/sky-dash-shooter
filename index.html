@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <meta name="theme-color" content="#0b0f1a" />
+    <meta name="description" content="2D 跑酷/飛機/標靶射擊小遊戲，支援手機與電腦瀏覽器" />
+    <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+    <title>Sky Dash Shooter</title>
+    <style>
+      html, body {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+        background: #0b0f1a;
+        overflow: hidden;
+        touch-action: none;
+        overscroll-behavior: none;
+      }
+      /* touch-action:none above stops scroll/zoom/pan gestures, but a still-held finger
+         (exactly what the joystick's 5s reposition hold looks like) is a different gesture
+         class: iOS/Android's long-press text-selection callout / magnifier. That's governed
+         by -webkit-touch-callout / user-select, not touch-action, and nothing else in this
+         page (or Phaser itself) disables it — so a long hold on mobile got hijacked by the
+         OS mid-gesture, cancelling the touch before the reposition could complete. */
+      html, body, #app, canvas {
+        -webkit-touch-callout: none;
+        -webkit-user-select: none;
+        -moz-user-select: none;
+        -ms-user-select: none;
+        user-select: none;
+      }
+      canvas {
+        touch-action: none;
+      }
+      #app {
+        width: 100%;
+        height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      #rotate-overlay {
+        position: fixed;
+        inset: 0;
+        background: #0b0f1a;
+        color: #e6ecff;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        flex-direction: column;
+        font-family: system-ui, sans-serif;
+        text-align: center;
+        z-index: 1000;
+        padding: 24px;
+      }
+      #rotate-overlay.visible {
+        display: flex;
+      }
+      #rotate-overlay .icon {
+        font-size: 48px;
+        margin-bottom: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <div id="rotate-overlay">
+      <div class="icon">&#8635;</div>
+      <div>請將手機轉為橫向以開始遊戲</div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

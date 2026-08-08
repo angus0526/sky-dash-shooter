@@ -1,0 +1,9 @@
+Space Shooter Music by Oblidivm
+Source: https://opengameart.org/content/space-shooter-music
+License: CC-BY 3.0 (Creative Commons Attribution 3.0)
+Attribution: MUSIC BY OBLIDIVM http://oblidivmmusic.blogspot.com.es/
+
+Tracks used in this project:
+- SkyFire (Title Screen).ogg -> music_normal.ogg
+- DeathMatch (Boss Theme).ogg -> music_boss.ogg
+- Defeated (Game Over Tune).ogg -> music_gameover.ogg
