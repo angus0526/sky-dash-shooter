@@ -28,7 +28,6 @@ import {
   HOMING_FIRE_COOLDOWN_MS,
   HOMING_SPLASH_DAMAGE_TO_BOSS,
   NUKE_EXPLOSION_RADIUS,
-  PICKUP_MAXED_BONUS_SCORE,
   RICOCHET_DAMAGE_TO_BOSS,
   RICOCHET_FIRE_COOLDOWN_MS,
   HOMING_DAMAGE_TO_BOSS,
@@ -36,12 +35,17 @@ import {
   SPECIAL_NUKE_TINTS,
   ULTIMATE_BOSS_DAMAGE,
   ULTIMATE_COOLDOWN_MS,
-  WEAPON_LEVEL_MAX
+  WEAPON_DAMAGE_GROWTH_PER_LEVEL
 } from '../config/constants';
 
 const BULLET_DAMAGE_TO_BOSS = 4;
 const LASER_DAMAGE_TO_BOSS = 6;
 const NUKE_DAMAGE_TO_BOSS = 20;
+
+/** Scales a weapon's base boss-damage by the level the projectile was actually fired at — unlimited, so a shot from a well-fed weapon keeps hitting harder even past the old fixed level cap. */
+function scaleDamage(base: number, level: number): number {
+  return base * (1 + (level - 1) * WEAPON_DAMAGE_GROWTH_PER_LEVEL);
+}
 
 export class GameScene extends Phaser.Scene {
   private player!: Player;
@@ -98,7 +102,7 @@ export class GameScene extends Phaser.Scene {
     this.music = new Music(this);
     this.weaponSystem = new WeaponSystem(this, this.bullets, this.lasers, this.nukes, this.sfx);
     this.bossManager = new BossManager(this, this.spawner);
-    this.nukes.onDetonate = (x, y) => this.handleNukeDetonate(x, y);
+    this.nukes.onDetonate = (x, y, level) => this.handleNukeDetonate(x, y, level);
     this.bossManager.onBossStart = () => this.music.play('music_boss');
     this.bossManager.onBossEnd = () => this.music.play('music_normal');
     this.music.play('music_normal');
@@ -166,11 +170,12 @@ export class GameScene extends Phaser.Scene {
       const missile = hObj as Phaser.Physics.Arcade.Sprite;
       const target = targetObj as Target;
       if (!missile.active || !target.active) return;
+      const level = (missile.getData('level') as number) ?? 1;
       const hitX = missile.x;
       const hitY = missile.y;
       this.homings.deactivate(missile);
       this.killTarget(target);
-      this.homingSplash(hitX, hitY, false);
+      this.homingSplash(hitX, hitY, false, level);
     });
 
     // Boss: player weapons hit the boss; the boss's own bullets/body hurt the player.
@@ -185,13 +190,15 @@ export class GameScene extends Phaser.Scene {
     this.physics.add.overlap(this.bullets.group, this.bossManager.boss, (a, b) => {
       const bullet = pickProjectile(a, b);
       if (!bullet.active || !this.bossManager.boss.active) return;
+      const level = (bullet.getData('level') as number) ?? 1;
       this.bullets.deactivate(bullet);
-      this.damageBoss(BULLET_DAMAGE_TO_BOSS);
+      this.damageBoss(scaleDamage(BULLET_DAMAGE_TO_BOSS, level));
     });
     this.physics.add.overlap(this.lasers.group, this.bossManager.boss, (a, b) => {
       const laser = pickProjectile(a, b);
       if (!laser.active || !this.bossManager.boss.active) return;
-      this.damageBoss(LASER_DAMAGE_TO_BOSS);
+      const level = (laser.getData('level') as number) ?? 1;
+      this.damageBoss(scaleDamage(LASER_DAMAGE_TO_BOSS, level));
     });
     this.physics.add.overlap(this.nukes.group, this.bossManager.boss, (a, b) => {
       const nuke = pickProjectile(a, b);
@@ -201,17 +208,19 @@ export class GameScene extends Phaser.Scene {
     this.physics.add.overlap(this.ricochets.group, this.bossManager.boss, (a, b) => {
       const bullet = pickProjectile(a, b);
       if (!bullet.active || !this.bossManager.boss.active) return;
+      const level = (bullet.getData('level') as number) ?? 1;
       this.ricochets.deactivate(bullet);
-      this.damageBoss(RICOCHET_DAMAGE_TO_BOSS);
+      this.damageBoss(scaleDamage(RICOCHET_DAMAGE_TO_BOSS, level));
     });
     this.physics.add.overlap(this.homings.group, this.bossManager.boss, (a, b) => {
       const missile = pickProjectile(a, b);
       if (!missile.active || !this.bossManager.boss.active) return;
+      const level = (missile.getData('level') as number) ?? 1;
       const hitX = missile.x;
       const hitY = missile.y;
       this.homings.deactivate(missile);
-      this.damageBoss(HOMING_DAMAGE_TO_BOSS);
-      this.homingSplash(hitX, hitY, true);
+      this.damageBoss(scaleDamage(HOMING_DAMAGE_TO_BOSS, level));
+      this.homingSplash(hitX, hitY, true, level);
     });
     this.physics.add.overlap(this.player, this.bossManager.boss, () => {
       if (!this.bossManager.boss.active) return;
@@ -234,7 +243,7 @@ export class GameScene extends Phaser.Scene {
     });
 
     GameEvents.emit(EVENTS.SCORE_CHANGED, this.score);
-    GameEvents.emit(EVENTS.HEALTH_CHANGED, this.player.health);
+    GameEvents.emit(EVENTS.HEALTH_CHANGED, { health: this.player.health, maxHealth: this.player.maxHealth });
     GameEvents.emit(EVENTS.SHIELD_CHANGED, this.player.shieldCharges);
     GameEvents.emit(EVENTS.PLANE_CHANGED, this.currentPlane);
     GameEvents.emit(EVENTS.WEAPON_CHANGED, this.weaponLevels());
@@ -331,44 +340,34 @@ export class GameScene extends Phaser.Scene {
     return { homing: this.homingLevel, nuke: this.homingNukeLevel };
   }
 
+  /** Every pickup type is uncapped now, so every single one always applies — no more "already maxed, give bonus score instead" fallback needed. */
   private handlePickup(type: PickupType): void {
     this.sfx.pickup();
 
-    let applied: boolean;
     if (type === 'heart') {
-      applied = this.player.heal();
-      if (applied) GameEvents.emit(EVENTS.HEALTH_CHANGED, this.player.health);
+      this.player.heal();
+      GameEvents.emit(EVENTS.HEALTH_CHANGED, { health: this.player.health, maxHealth: this.player.maxHealth });
     } else if (type === 'shield') {
-      applied = this.player.addShield();
-      if (applied) GameEvents.emit(EVENTS.SHIELD_CHANGED, this.player.shieldCharges);
+      this.player.addShield();
+      GameEvents.emit(EVENTS.SHIELD_CHANGED, this.player.shieldCharges);
     } else if (this.currentPlane === 'default') {
-      applied = this.weaponSystem.upgrade(type);
-      if (applied) GameEvents.emit(EVENTS.WEAPON_CHANGED, this.weaponLevels());
+      this.weaponSystem.upgrade(type);
+      GameEvents.emit(EVENTS.WEAPON_CHANGED, this.weaponLevels());
     } else {
-      applied = this.upgradePlaneWeapon(type, this.currentPlane);
-    }
-
-    if (!applied) {
-      this.score += PICKUP_MAXED_BONUS_SCORE;
-      GameEvents.emit(EVENTS.SCORE_CHANGED, this.score);
+      this.upgradePlaneWeapon(type, this.currentPlane);
     }
   }
 
-  /** Bullet/laser pickups boost the plane's primary weapon; nuke pickups boost its shared colorful nuke. Returns false if that slot is already maxed. */
-  private upgradePlaneWeapon(type: PickupType, plane: 'ricochet' | 'homing'): boolean {
+  /** Bullet/laser pickups boost the plane's primary weapon; nuke pickups boost its shared colorful nuke. */
+  private upgradePlaneWeapon(type: PickupType, plane: 'ricochet' | 'homing'): void {
     if (type === 'nuke') {
-      const level = plane === 'ricochet' ? this.ricochetNukeLevel : this.homingNukeLevel;
-      if (level >= WEAPON_LEVEL_MAX) return false;
       if (plane === 'ricochet') this.ricochetNukeLevel++;
       else this.homingNukeLevel++;
     } else {
-      const level = plane === 'ricochet' ? this.ricochetLevel : this.homingLevel;
-      if (level >= WEAPON_LEVEL_MAX) return false;
       if (plane === 'ricochet') this.ricochetLevel++;
       else this.homingLevel++;
     }
     GameEvents.emit(EVENTS.WEAPON_CHANGED, this.weaponLevels());
-    return true;
   }
 
   private handlePlaneSelect(planeId: PlaneId): void {
@@ -393,7 +392,7 @@ export class GameScene extends Phaser.Scene {
       return;
     }
 
-    GameEvents.emit(EVENTS.HEALTH_CHANGED, this.player.health);
+    GameEvents.emit(EVENTS.HEALTH_CHANGED, { health: this.player.health, maxHealth: this.player.maxHealth });
     if (this.player.health <= 0) this.triggerGameOver();
   }
 
@@ -422,7 +421,7 @@ export class GameScene extends Phaser.Scene {
     this.bossManager.defeatBoss();
   }
 
-  private handleNukeDetonate(x: number, y: number): void {
+  private handleNukeDetonate(x: number, y: number, level: number): void {
     this.sfx.nuke();
     this.explosion.playBig(x, y, NUKE_EXPLOSION_RADIUS);
 
@@ -444,7 +443,7 @@ export class GameScene extends Phaser.Scene {
     if (this.bossManager.active && this.bossManager.boss.active) {
       const dist = Phaser.Math.Distance.Between(x, y, this.bossManager.boss.x, this.bossManager.boss.y);
       if (dist <= NUKE_EXPLOSION_RADIUS) {
-        const defeated = this.bossManager.boss.takeDamage(NUKE_DAMAGE_TO_BOSS);
+        const defeated = this.bossManager.boss.takeDamage(scaleDamage(NUKE_DAMAGE_TO_BOSS, level));
         if (defeated) {
           scoreGained += BOSS_DEFEAT_SCORE;
           this.recordBossDefeat();
@@ -460,7 +459,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   /** Small blast radius on every homing missile impact — clears nearby chaff and chips extra boss damage. `hitBoss` is true when the primary hit already damaged the boss, so it isn't hit twice. */
-  private homingSplash(x: number, y: number, hitBoss: boolean): void {
+  private homingSplash(x: number, y: number, hitBoss: boolean, level: number): void {
     this.explosion.playSmall(x, y);
 
     let scoreGained = 0;
@@ -480,7 +479,7 @@ export class GameScene extends Phaser.Scene {
 
     if (!hitBoss && this.bossManager.active && this.bossManager.boss.active) {
       const dist = Phaser.Math.Distance.Between(x, y, this.bossManager.boss.x, this.bossManager.boss.y);
-      if (dist <= HOMING_EXPLOSION_RADIUS) this.damageBoss(HOMING_SPLASH_DAMAGE_TO_BOSS);
+      if (dist <= HOMING_EXPLOSION_RADIUS) this.damageBoss(scaleDamage(HOMING_SPLASH_DAMAGE_TO_BOSS, level));
     }
 
     if (scoreGained > 0) {
@@ -563,7 +562,7 @@ export class GameScene extends Phaser.Scene {
     this.bossManager.reset();
 
     GameEvents.emit(EVENTS.SCORE_CHANGED, this.score);
-    GameEvents.emit(EVENTS.HEALTH_CHANGED, this.player.health);
+    GameEvents.emit(EVENTS.HEALTH_CHANGED, { health: this.player.health, maxHealth: this.player.maxHealth });
     GameEvents.emit(EVENTS.SHIELD_CHANGED, this.player.shieldCharges);
     GameEvents.emit(EVENTS.PLANE_CHANGED, this.currentPlane);
     GameEvents.emit(EVENTS.WEAPON_CHANGED, this.weaponLevels());

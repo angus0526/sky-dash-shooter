@@ -1,7 +1,9 @@
 import Phaser from 'phaser';
 import { GAME_WIDTH, TIER2_BODY_SIZE, TIER2_SPEED, WEAPON_SPREAD_SPACING } from '../config/constants';
 
-const POOL_SIZE = 44;
+// Weapon levels are uncapped now, so a sustained high-level burst needs a lot more headroom
+// than the old fixed-10 cap ever required.
+const POOL_SIZE = 140;
 const SPRITE_UP_OFFSET = Math.PI / 2;
 
 /** Laser weapon: thicker beam that pierces through multiple targets in one shot. */
@@ -35,11 +37,11 @@ export class LaserPool {
 
     for (let i = 0; i < count; i++) {
       const offset = (i - (count - 1) / 2) * WEAPON_SPREAD_SPACING;
-      this.spawnOne(x + perpX * offset, y + perpY * offset, angle);
+      this.spawnOne(x + perpX * offset, y + perpY * offset, angle, count);
     }
   }
 
-  private spawnOne(x: number, y: number, angle: number): void {
+  private spawnOne(x: number, y: number, angle: number, level: number): void {
     const laser = this.group.getFirstDead(false) as Phaser.Physics.Arcade.Sprite | null;
     if (!laser) return;
 
@@ -47,6 +49,7 @@ export class LaserPool {
     laser.setActive(true);
     laser.setVisible(true);
     laser.body!.enable = true;
+    laser.setData('level', level);
 
     laser.setRotation(angle + SPRITE_UP_OFFSET);
     (laser.body as Phaser.Physics.Arcade.Body).setVelocity(

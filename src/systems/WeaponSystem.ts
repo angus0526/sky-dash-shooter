@@ -3,11 +3,11 @@ import { BulletPool } from './BulletPool';
 import { LaserPool } from './LaserPool';
 import { NukePool } from './NukePool';
 import { Sfx } from './Sfx';
-import { TIER1_FIRE_COOLDOWN_MS, TIER2_FIRE_COOLDOWN_MS, TIER3_FIRE_COOLDOWN_MS, WEAPON_LEVEL_MAX } from '../config/constants';
+import { TIER1_FIRE_COOLDOWN_MS, TIER2_FIRE_COOLDOWN_MS, TIER3_FIRE_COOLDOWN_MS } from '../config/constants';
 
 export type WeaponType = 'bullet' | 'laser' | 'nuke';
 
-/** Owns three independent weapon levels (0-10) that all fire simultaneously when held. */
+/** Owns three independent weapon levels, uncapped, that all fire simultaneously when held. */
 export class WeaponSystem {
   bulletLevel = 1;
   laserLevel = 0;
@@ -31,17 +31,10 @@ export class WeaponSystem {
     return this.nukeLevel;
   }
 
-  isMaxed(type: WeaponType): boolean {
-    return this.levelOf(type) >= WEAPON_LEVEL_MAX;
-  }
-
-  /** Returns true if the level actually increased (false if already maxed). */
-  upgrade(type: WeaponType): boolean {
-    if (this.isMaxed(type)) return false;
+  upgrade(type: WeaponType): void {
     if (type === 'bullet') this.bulletLevel++;
     else if (type === 'laser') this.laserLevel++;
     else this.nukeLevel++;
-    return true;
   }
 
   reset(): void {

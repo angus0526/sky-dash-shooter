@@ -1,7 +1,17 @@
 import Phaser from 'phaser';
-import { GAME_HEIGHT, GAME_WIDTH, HOMING_SEEK_RADIUS, HOMING_SPEED, HOMING_TURN_RATE_DEG } from '../config/constants';
+import {
+  GAME_HEIGHT,
+  GAME_WIDTH,
+  HOMING_SEEK_RADIUS,
+  HOMING_SPEED,
+  HOMING_SPEED_GROWTH_MAX_MULTIPLIER,
+  HOMING_SPEED_GROWTH_PER_LEVEL,
+  HOMING_TURN_RATE_DEG
+} from '../config/constants';
 
-const POOL_SIZE = 30;
+// Weapon levels are uncapped now, so a sustained high-level burst needs a lot more headroom
+// than the old fixed-10 cap ever required.
+const POOL_SIZE = 100;
 const SPRITE_UP_OFFSET = Math.PI / 2;
 
 // Missiles launch fanned out front/back/up/down (and diagonals) instead of all straight
@@ -11,7 +21,7 @@ const LAUNCH_DIRECTIONS_DEG = [0, -90, 90, 180, -45, 45, -135, 135];
 
 type Lockable = Phaser.Physics.Arcade.Sprite;
 
-/** Homing weapon: fans out in multiple directions at launch, each missile prefers a distinct nearby target (no cone restriction), and steers toward it in flight. */
+/** Homing weapon: fans out in multiple directions at launch, each missile prefers a distinct nearby target (no cone restriction), and steers toward it in flight. Speed and damage both scale with the level it was fired at. */
 export class HomingPool {
   group: Phaser.Physics.Arcade.Group;
 
@@ -33,6 +43,7 @@ export class HomingPool {
 
   fireSpread(count: number, x: number, y: number, targets: Phaser.Physics.Arcade.Group, extra: Lockable | null): void {
     const used = new Set<Lockable>();
+    const speed = Math.min(HOMING_SPEED_GROWTH_MAX_MULTIPLIER, 1 + (count - 1) * HOMING_SPEED_GROWTH_PER_LEVEL) * HOMING_SPEED;
 
     for (let i = 0; i < count; i++) {
       const angle = Phaser.Math.DegToRad(LAUNCH_DIRECTIONS_DEG[i % LAUNCH_DIRECTIONS_DEG.length]);
@@ -40,7 +51,7 @@ export class HomingPool {
       const spawnY = y + Math.sin(angle) * 14;
       const target = this.findNearest(spawnX, spawnY, targets, extra, used);
       if (target) used.add(target);
-      this.spawnOne(spawnX, spawnY, target, angle);
+      this.spawnOne(spawnX, spawnY, target, angle, speed, count);
     }
   }
 
@@ -83,7 +94,7 @@ export class HomingPool {
     return best ?? fallback;
   }
 
-  private spawnOne(x: number, y: number, target: Lockable | null, launchAngle: number): void {
+  private spawnOne(x: number, y: number, target: Lockable | null, launchAngle: number, speed: number, level: number): void {
     const missile = this.group.getFirstDead(false) as Phaser.Physics.Arcade.Sprite | null;
     if (!missile) return;
 
@@ -92,9 +103,13 @@ export class HomingPool {
     missile.setVisible(true);
     missile.body!.enable = true;
     missile.setData('target', target);
+    missile.setData('speed', speed);
+    // Stored so boss-hit damage reflects the level this specific shot was fired at, not
+    // whatever the weapon's level happens to be by the time it lands.
+    missile.setData('level', level);
 
     missile.setRotation(launchAngle + SPRITE_UP_OFFSET);
-    (missile.body as Phaser.Physics.Arcade.Body).setVelocity(Math.cos(launchAngle) * HOMING_SPEED, Math.sin(launchAngle) * HOMING_SPEED);
+    (missile.body as Phaser.Physics.Arcade.Body).setVelocity(Math.cos(launchAngle) * speed, Math.sin(launchAngle) * speed);
   }
 
   update(deltaMs: number): void {
@@ -105,13 +120,14 @@ export class HomingPool {
       if (!missile.active) return;
 
       const target = missile.getData('target') as Lockable | undefined;
+      const speed = (missile.getData('speed') as number) ?? HOMING_SPEED;
       const body = missile.body as Phaser.Physics.Arcade.Body;
 
       if (target && target.active) {
         const desiredAngle = Math.atan2(target.y - missile.y, target.x - missile.x);
         const currentAngle = Math.atan2(body.velocity.y, body.velocity.x);
         const newAngle = Phaser.Math.Angle.RotateTo(currentAngle, desiredAngle, maxTurn);
-        body.setVelocity(Math.cos(newAngle) * HOMING_SPEED, Math.sin(newAngle) * HOMING_SPEED);
+        body.setVelocity(Math.cos(newAngle) * speed, Math.sin(newAngle) * speed);
         missile.setRotation(newAngle + SPRITE_UP_OFFSET);
       }
 

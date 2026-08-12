@@ -11,7 +11,6 @@ import {
   GAME_WIDTH,
   JOYSTICK_RADIUS,
   MUTE_STORAGE_KEY,
-  PLAYER_MAX_HEALTH,
   SHOOT_BUTTON_RADIUS,
   ULTIMATE_BUTTON_RADIUS
 } from '../config/constants';
@@ -45,7 +44,7 @@ export class UIScene extends Phaser.Scene {
   private scoreText!: Phaser.GameObjects.Text;
   private weaponText!: Phaser.GameObjects.Text;
   private shieldText!: Phaser.GameObjects.Text;
-  private heartIcons: Phaser.GameObjects.Text[] = [];
+  private healthText!: Phaser.GameObjects.Text;
   private gameOverPanel!: Phaser.GameObjects.Container;
   private pausePanel!: Phaser.GameObjects.Container;
   private introPanel!: Phaser.GameObjects.Container;
@@ -109,16 +108,15 @@ export class UIScene extends Phaser.Scene {
     this.scoreText.setScrollFactor(0);
     this.scoreText.setDepth(30);
 
-    for (let i = 0; i < PLAYER_MAX_HEALTH; i++) {
-      const heart = this.add.text(16 + i * 24, 104, '❤', {
-        fontFamily: 'system-ui, sans-serif',
-        fontSize: '20px',
-        color: '#ff5470'
-      });
-      heart.setScrollFactor(0);
-      heart.setDepth(30);
-      this.heartIcons.push(heart);
-    }
+    // Health is uncapped now (every heart pickup raises the ceiling), so a fixed row of heart
+    // icons no longer makes sense — a single icon plus a "current/max" count scales to any value.
+    this.healthText = this.add.text(16, 104, '❤ 0/0', {
+      fontFamily: 'system-ui, sans-serif',
+      fontSize: '20px',
+      color: '#ff5470'
+    });
+    this.healthText.setScrollFactor(0);
+    this.healthText.setDepth(30);
 
     this.weaponText = this.add.text(16, 130, '', {
       fontFamily: 'system-ui, sans-serif',
@@ -428,8 +426,8 @@ export class UIScene extends Phaser.Scene {
     this.scoreText.setText(`分數 ${score}`);
   }
 
-  private onHealthChanged(health: number): void {
-    this.heartIcons.forEach((heart, i) => heart.setAlpha(i < health ? 1 : 0.15));
+  private onHealthChanged({ health, maxHealth }: { health: number; maxHealth: number }): void {
+    this.healthText.setText(`❤ ${health}/${maxHealth}`);
   }
 
   private onWeaponChanged(levels: Record<string, number>): void {

@@ -1,7 +1,9 @@
 import Phaser from 'phaser';
 import { GAME_WIDTH, TIER1_SPEED, WEAPON_SPREAD_SPACING } from '../config/constants';
 
-const POOL_SIZE = 44;
+// Weapon levels are uncapped now, so a sustained high-level burst needs a lot more headroom
+// than the old fixed-10 cap ever required.
+const POOL_SIZE = 140;
 
 // The laser art points "up" by default, so a 90deg offset aligns it with travel direction.
 const SPRITE_UP_OFFSET = Math.PI / 2;
@@ -34,11 +36,11 @@ export class BulletPool {
 
     for (let i = 0; i < count; i++) {
       const offset = (i - (count - 1) / 2) * WEAPON_SPREAD_SPACING;
-      this.spawnOne(x + perpX * offset, y + perpY * offset, angle);
+      this.spawnOne(x + perpX * offset, y + perpY * offset, angle, count);
     }
   }
 
-  private spawnOne(x: number, y: number, angle: number): void {
+  private spawnOne(x: number, y: number, angle: number, level: number): void {
     const bullet = this.group.getFirstDead(false) as Phaser.Physics.Arcade.Sprite | null;
     if (!bullet) return;
 
@@ -46,6 +48,9 @@ export class BulletPool {
     bullet.setActive(true);
     bullet.setVisible(true);
     bullet.body!.enable = true;
+    // Stored so boss-hit damage reflects the level this specific shot was fired at, not
+    // whatever the weapon's level happens to be by the time it lands.
+    bullet.setData('level', level);
 
     bullet.setRotation(angle + SPRITE_UP_OFFSET);
     (bullet.body as Phaser.Physics.Arcade.Body).setVelocity(

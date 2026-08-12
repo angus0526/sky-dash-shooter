@@ -1,14 +1,5 @@
 import Phaser from 'phaser';
-import {
-  GAME_HEIGHT,
-  GAME_WIDTH,
-  PLAYER_INVULN_MS,
-  PLAYER_MAX_HEALTH,
-  PLAYER_SPEED,
-  PLAYER_START_X,
-  PLAYER_START_Y,
-  SHIELD_MAX_CHARGES
-} from '../config/constants';
+import { GAME_HEIGHT, GAME_WIDTH, PLAYER_INVULN_MS, PLAYER_SPEED, PLAYER_START_X, PLAYER_START_Y, PLAYER_START_HEALTH } from '../config/constants';
 
 // The ship art points "up" (nose at the top); the game faces right, so every
 // displayed angle is offset by 90deg from the raw movement/tilt math below.
@@ -23,7 +14,8 @@ const SHIELD_TEXTURE_BY_CHARGE: Record<number, string> = {
 export type DamageResult = 'shield' | 'health' | 'none';
 
 export class Player extends Phaser.Physics.Arcade.Sprite {
-  health = PLAYER_MAX_HEALTH;
+  health = PLAYER_START_HEALTH;
+  maxHealth = PLAYER_START_HEALTH;
   shieldCharges = 0;
   private invulnUntil = 0;
   private shieldVisual: Phaser.GameObjects.Image;
@@ -77,17 +69,16 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     return this.scene.time.now < this.invulnUntil;
   }
 
-  addShield(): boolean {
-    if (this.shieldCharges >= SHIELD_MAX_CHARGES) return false;
+  /** Unlimited — every shield pickup stacks another charge, no matter how many are already banked. */
+  addShield(): void {
     this.shieldCharges++;
     this.refreshShieldVisual();
-    return true;
   }
 
-  heal(): boolean {
-    if (this.health >= PLAYER_MAX_HEALTH) return false;
+  /** Unlimited — every heart pickup both heals 1 and permanently raises the max by 1, so it's never "wasted" at full health. */
+  heal(): void {
+    this.maxHealth++;
     this.health++;
-    return true;
   }
 
   takeDamage(): DamageResult {
@@ -134,7 +125,8 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   }
 
   reset(): void {
-    this.health = PLAYER_MAX_HEALTH;
+    this.health = PLAYER_START_HEALTH;
+    this.maxHealth = PLAYER_START_HEALTH;
     this.shieldCharges = 0;
     this.invulnUntil = 0;
     this.alpha = 1;

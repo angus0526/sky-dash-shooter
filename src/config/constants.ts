@@ -4,7 +4,9 @@ export const GAME_HEIGHT = 540;
 export const PLAYER_SPEED = 320;
 export const PLAYER_START_X = 140;
 export const PLAYER_START_Y = GAME_HEIGHT / 2;
-export const PLAYER_MAX_HEALTH = 5;
+// Starting health, not a cap — every heart pickup now raises the ceiling by 1 as well as
+// healing, so max health has no upper bound (the more hearts you eat, the stronger you get).
+export const PLAYER_START_HEALTH = 5;
 export const PLAYER_INVULN_MS = 1000;
 
 export const SCROLL_SPEED_START = 220;
@@ -31,9 +33,15 @@ export const JOYSTICK_REPOSITION_HOLD_MS = 5000;
 export const JOYSTICK_REPOSITION_MOVE_TOLERANCE = 40;
 export const JOYSTICK_POSITION_STORAGE_KEY = 'skydash_joystick_pos';
 
-// Weapon levels — bullet/laser/nuke each level independently, 0-10.
-export const WEAPON_LEVEL_MAX = 10;
+// Weapon levels — bullet/laser/nuke (and ricochet/homing/their shared special nuke) each
+// level independently and have no cap: every matching pickup both fires one more parallel
+// shot (up to the pool-size safety margin below) AND permanently boosts that weapon's
+// per-shot damage, so power keeps climbing even once shot count tops out.
 export const WEAPON_SPREAD_SPACING = 16;
+// +15% boss damage per level above 1 — applied to whichever level the projectile was
+// actually fired at (stored on the projectile itself), not the weapon's current level, so a
+// shot in flight doesn't retroactively change strength if the player upgrades mid-flight.
+export const WEAPON_DAMAGE_GROWTH_PER_LEVEL = 0.15;
 
 export const TIER1_FIRE_COOLDOWN_MS = 260;
 export const TIER1_SPEED = 700;
@@ -46,14 +54,10 @@ export const TIER3_FIRE_COOLDOWN_MS = 950;
 export const TIER3_SPEED = 380;
 export const NUKE_EXPLOSION_RADIUS = 190;
 
-// Shield
-export const SHIELD_MAX_CHARGES = 3;
-
 // Pickups
 export const PICKUP_INTERVAL_MS = 15000;
 export const PICKUP_INTERVAL_JITTER_MS = 4000;
 export const PICKUP_SPEED_FACTOR = 0.7;
-export const PICKUP_MAXED_BONUS_SCORE = 25;
 
 // Difficulty stages (obstacle variety ramps up over time)
 export const DIFFICULTY_STAGE_SEC = 20;
@@ -83,6 +87,12 @@ export const BOSS_DEFEAT_SCORE = 200;
 // Ricochet weapon (plane 2) — upgraded to a piercing "bounce laser": it now pierces every
 // Target it passes through (like the default plane's Tier2 laser) instead of dying on the
 // first hit, and bounces more times, so a single shot can chain several kills.
+//
+// The bounce itself only ever fired off the top/bottom edges — for a typical near-horizontal
+// aim (most targets sit roughly in front of the player), the beam reaches the right edge and
+// despawns long before its shallow vertical drift ever reaches y=4 or y=536, so in practice
+// most shots never bounced at all. Bouncing off the right edge too (see RicochetPool) makes
+// every shot bounce at least once, visibly, well inside the camera view.
 export const RICOCHET_FIRE_COOLDOWN_MS = 300;
 export const RICOCHET_SPEED = 700;
 export const RICOCHET_MAX_BOUNCES = 6;
@@ -99,6 +109,11 @@ export const RICOCHET_MAX_LIFETIME_MS = 2200;
 // each one prefers a distinct target, and they detonate in a small blast radius on impact.
 export const HOMING_FIRE_COOLDOWN_MS = 380;
 export const HOMING_SPEED = 520;
+// Speed also scales with level (capped — an uncapped multiplier at very high levels would
+// move missiles far enough per physics step to tunnel through thin colliders), on top of the
+// shared WEAPON_DAMAGE_GROWTH_PER_LEVEL damage scaling every weapon gets.
+export const HOMING_SPEED_GROWTH_PER_LEVEL = 0.05;
+export const HOMING_SPEED_GROWTH_MAX_MULTIPLIER = 2.5;
 export const HOMING_TURN_RATE_DEG = 300;
 export const HOMING_SEEK_RADIUS = 500;
 export const HOMING_DAMAGE_TO_BOSS = 16;

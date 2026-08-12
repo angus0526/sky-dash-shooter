@@ -1,7 +1,9 @@
 import Phaser from 'phaser';
 import { GAME_WIDTH, TIER3_SPEED, WEAPON_SPREAD_SPACING } from '../config/constants';
 
-const POOL_SIZE = 34;
+// Weapon levels are uncapped now, so a sustained high-level burst needs a lot more headroom
+// than the old fixed-10 cap ever required.
+const POOL_SIZE = 100;
 const SPRITE_UP_OFFSET = Math.PI / 2;
 const NUKE_SPREAD_SPACING = WEAPON_SPREAD_SPACING * 1.8;
 const DEFAULT_TINT = 0xff5533;
@@ -9,7 +11,8 @@ const DEFAULT_TINT = 0xff5533;
 /** Nuke weapon: slow projectiles that explode into an area-of-effect blast on impact or expiry. Shared by the default plane's Tier3 nuke and the ricochet/homing planes' colorful nuke — same pool, optional per-shot tint. */
 export class NukePool {
   group: Phaser.Physics.Arcade.Group;
-  onDetonate: ((x: number, y: number) => void) | null = null;
+  /** `level` is whatever level this specific nuke was fired at, so boss damage reflects the shot, not the weapon's current level. */
+  onDetonate: ((x: number, y: number, level: number) => void) | null = null;
 
   constructor(scene: Phaser.Scene) {
     this.group = scene.physics.add.group({
@@ -40,11 +43,11 @@ export class NukePool {
     for (let i = 0; i < count; i++) {
       const offset = (i - (count - 1) / 2) * NUKE_SPREAD_SPACING;
       const tint = tintPalette ? tintPalette[i % tintPalette.length] : DEFAULT_TINT;
-      this.spawnOne(x + perpX * offset, y + perpY * offset, angle, tint);
+      this.spawnOne(x + perpX * offset, y + perpY * offset, angle, tint, count);
     }
   }
 
-  private spawnOne(x: number, y: number, angle: number, tint: number): void {
+  private spawnOne(x: number, y: number, angle: number, tint: number, level: number): void {
     const nuke = this.group.getFirstDead(false) as Phaser.Physics.Arcade.Sprite | null;
     if (!nuke) return;
 
@@ -53,6 +56,7 @@ export class NukePool {
     nuke.setVisible(true);
     nuke.body!.enable = true;
     nuke.setTint(tint);
+    nuke.setData('level', level);
 
     nuke.setRotation(angle + SPRITE_UP_OFFSET);
     (nuke.body as Phaser.Physics.Arcade.Body).setVelocity(
@@ -72,7 +76,8 @@ export class NukePool {
 
   /** Triggers the AoE callback at the nuke's current position, then recycles it. */
   detonate(nuke: Phaser.Physics.Arcade.Sprite): void {
-    this.onDetonate?.(nuke.x, nuke.y);
+    const level = (nuke.getData('level') as number) ?? 1;
+    this.onDetonate?.(nuke.x, nuke.y, level);
     this.deactivate(nuke);
   }
 
