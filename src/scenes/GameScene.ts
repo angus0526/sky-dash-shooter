@@ -59,14 +59,14 @@ function scaleDamage(base: number, level: number): number {
   return base * (1 + (level - 1) * WEAPON_DAMAGE_GROWTH_PER_LEVEL);
 }
 
-function snapGroup(group: Phaser.Physics.Arcade.Group): { x: number; y: number }[] {
-  return group
-    .getChildren()
-    .filter((o) => (o as Phaser.Physics.Arcade.Sprite).active)
-    .map((o) => {
-      const sprite = o as Phaser.Physics.Arcade.Sprite;
-      return { x: sprite.x, y: sprite.y };
-    });
+// Preserves each pool slot's index (null when inactive) rather than compacting down to only
+// the active members — see the GameSnapshot fields' doc comment in Multiplayer.ts for why
+// filtering breaks stable per-object identity across snapshots.
+function snapGroup(group: Phaser.Physics.Arcade.Group): ({ x: number; y: number } | null)[] {
+  return group.getChildren().map((o) => {
+    const sprite = o as Phaser.Physics.Arcade.Sprite;
+    return sprite.active ? { x: sprite.x, y: sprite.y } : null;
+  });
 }
 
 interface SceneInitData {
@@ -732,20 +732,14 @@ export class GameScene extends Phaser.Scene {
       ultimateReadyAt: this.ultimateReadyAt,
       players,
       targets: snapGroup(this.spawner.targets),
-      obstacles: this.spawner.obstacles
-        .getChildren()
-        .filter((o) => (o as Obstacle).active)
-        .map((o) => {
-          const obstacle = o as Obstacle;
-          return { x: obstacle.x, y: obstacle.y, big: obstacle.big };
-        }),
-      pickups: this.spawner.pickups
-        .getChildren()
-        .filter((p) => (p as Pickup).active)
-        .map((p) => {
-          const pickup = p as Pickup;
-          return { x: pickup.x, y: pickup.y, type: pickup.pickupType };
-        }),
+      obstacles: this.spawner.obstacles.getChildren().map((o) => {
+        const obstacle = o as Obstacle;
+        return obstacle.active ? { x: obstacle.x, y: obstacle.y, big: obstacle.big } : null;
+      }),
+      pickups: this.spawner.pickups.getChildren().map((p) => {
+        const pickup = p as Pickup;
+        return pickup.active ? { x: pickup.x, y: pickup.y, type: pickup.pickupType } : null;
+      }),
       boss:
         this.bossManager.active && this.bossManager.boss.active
           ? {

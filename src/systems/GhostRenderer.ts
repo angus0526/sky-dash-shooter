@@ -49,10 +49,17 @@ class SimplePool<T extends { x: number; y: number }> {
     }
   }
 
-  sync(entries: T[]): void {
-    entries.forEach((entry, i) => {
-      if (i >= this.sprites.length) return;
-      const sprite = this.sprites[i];
+  /** `entries[i]` must always refer to the same real pool slot across calls (null when that
+   * slot is inactive) — this is the client's only notion of "which object is this", so an
+   * index that means something different each call reads as that ghost teleporting/flying
+   * to an unrelated position instead of representing its own object smoothly moving. */
+  sync(entries: (T | null)[]): void {
+    this.sprites.forEach((sprite, i) => {
+      const entry = entries[i];
+      if (!entry) {
+        sprite.setVisible(false);
+        return;
+      }
       sprite.setTexture(this.textureFor(entry));
       sprite.setScale(this.scaleFor(entry));
       // Snap immediately rather than easing in from wherever it last was (or its offscreen
@@ -63,7 +70,6 @@ class SimplePool<T extends { x: number; y: number }> {
       this.targetY[i] = entry.y;
       sprite.setVisible(true);
     });
-    for (let i = entries.length; i < this.sprites.length; i++) this.sprites[i].setVisible(false);
   }
 
   tick(factor: number): void {

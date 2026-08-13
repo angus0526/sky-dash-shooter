@@ -68,11 +68,17 @@ export interface GameSnapshot {
   /** Shared team cooldown, same as solo — any player triggering it charges it for everyone. */
   ultimateReadyAt: number;
   players: Record<string, PlayerSnap>;
-  targets: EntitySnap[];
-  obstacles: ObstacleSnap[];
-  pickups: PickupSnap[];
+  // Fixed-length, one entry per pool slot (null where that slot is currently inactive) —
+  // NOT compacted down to just the active ones. Array index is the only identity a client
+  // has for "which real object is this" across successive snapshots; if inactive slots were
+  // filtered out, every spawn/despawn elsewhere in the pool would shift every later index,
+  // and the client would smoothly ease each ghost toward what is actually a *different*
+  // real object's position — read as enemies/pickups flying erratically around the screen.
+  targets: (EntitySnap | null)[];
+  obstacles: (ObstacleSnap | null)[];
+  pickups: (PickupSnap | null)[];
   boss: BossSnap | null;
-  bossBullets: EntitySnap[];
+  bossBullets: (EntitySnap | null)[];
 }
 
 /** One Trystero room for one co-op run. The room creator is host (an app-level convention —
