@@ -1,7 +1,10 @@
 import Phaser from 'phaser';
 import { BOSS_BULLET_SPEED, GAME_WIDTH } from '../config/constants';
 
-const POOL_SIZE = 24;
+// Raised from 24: at the max player-count multiplier (3.0x) a single volley can fire up to
+// 9 bullets, and BOSS_FIRE_INTERVAL_MS keeps roughly two volleys' worth alive on screen at
+// once — 24 was tight enough to silently start dropping shots at max squad size.
+const POOL_SIZE = 40;
 const SPRITE_UP_OFFSET = Math.PI / 2;
 const SPREAD_DEG = 12;
 

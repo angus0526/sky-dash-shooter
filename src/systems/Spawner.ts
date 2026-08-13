@@ -54,30 +54,34 @@ export class Spawner {
   private nextPickupAt = 0;
   private paused = false;
 
-  constructor(scene: Phaser.Scene) {
+  /** Player-count difficulty multiplier (1.0 in solo — see PLAYER_COUNT_MULTIPLIER). Speeds up spawn cadence rather than bursting multiple spawns per tick, so it scales smoothly for fractional values like 1.5. */
+  constructor(scene: Phaser.Scene, private multiplier: number = 1) {
     this.scene = scene;
+
+    const poolSize = Math.ceil(POOL_SIZE * multiplier);
+    const pickupPoolSize = Math.ceil(PICKUP_POOL_SIZE * multiplier);
 
     this.targets = scene.physics.add.group({
       classType: Target,
       runChildUpdate: false,
-      maxSize: POOL_SIZE
+      maxSize: poolSize
     });
     this.obstacles = scene.physics.add.group({
       classType: Obstacle,
       runChildUpdate: false,
-      maxSize: POOL_SIZE
+      maxSize: poolSize
     });
     this.pickups = scene.physics.add.group({
       classType: Pickup,
       runChildUpdate: false,
-      maxSize: PICKUP_POOL_SIZE
+      maxSize: pickupPoolSize
     });
 
-    for (let i = 0; i < POOL_SIZE; i++) {
+    for (let i = 0; i < poolSize; i++) {
       this.targets.add(new Target(scene), true);
       this.obstacles.add(new Obstacle(scene), true);
     }
-    for (let i = 0; i < PICKUP_POOL_SIZE; i++) {
+    for (let i = 0; i < pickupPoolSize; i++) {
       this.pickups.add(new Pickup(scene), true);
     }
 
@@ -89,10 +93,11 @@ export class Spawner {
   }
 
   private get spawnInterval(): number {
-    return Math.max(
+    const base = Math.max(
       SPAWN_INTERVAL_MIN_MS,
       SPAWN_INTERVAL_START_MS - this.elapsedSec * SPAWN_INTERVAL_RAMP_PER_SEC
     );
+    return base / this.multiplier;
   }
 
   private get bigObstacleChance(): number {
@@ -101,7 +106,8 @@ export class Spawner {
   }
 
   private randomPickupDelay(): number {
-    return PICKUP_INTERVAL_MS + Phaser.Math.Between(-PICKUP_INTERVAL_JITTER_MS, PICKUP_INTERVAL_JITTER_MS);
+    const base = PICKUP_INTERVAL_MS + Phaser.Math.Between(-PICKUP_INTERVAL_JITTER_MS, PICKUP_INTERVAL_JITTER_MS);
+    return base / this.multiplier;
   }
 
   /** Fast-forwards the difficulty baseline, e.g. after a boss fight. */

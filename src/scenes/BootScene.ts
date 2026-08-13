@@ -103,9 +103,12 @@ export class BootScene extends Phaser.Scene {
 
     gfx.destroy();
 
-    // UIScene must finish registering its GameEvents listeners before GameScene's
-    // create() fires its initial state-sync emits, or the first sync gets dropped.
+    // GameScene doesn't auto-start anymore — main.ts starts it explicitly (with the
+    // resolved profile/multiplayer-session as init data) once the player has clicked
+    // through the name and room-selection overlays. UIScene launches immediately so its
+    // GameEvents listeners are registered before that later GameScene.create() fires its
+    // initial state-sync emits.
     this.scene.launch('UIScene');
-    this.scene.start('GameScene');
+    this.game.events.emit('boot-ready');
   }
 }

@@ -1,0 +1,30 @@
+rules_version = '2';
+
+// Paste this into Firebase Console → Firestore Database → Rules, replacing the default
+// test-mode rule (which allows anyone to read/write/delete anything for 30 days).
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /leaderboard/{entryId} {
+      allow read: if true;
+
+      allow create: if request.resource.data.name is string
+                    && request.resource.data.name.size() > 0
+                    && request.resource.data.name.size() <= 20
+                    && request.resource.data.bestScore is int
+                    && request.resource.data.bestScore > 0
+                    && request.resource.data.maxBossKills is int
+                    && request.resource.data.maxBossKills >= 0;
+
+      // A write may only ever raise the stored score — never lower or equal it.
+      allow update: if request.resource.data.name is string
+                    && request.resource.data.name.size() > 0
+                    && request.resource.data.name.size() <= 20
+                    && request.resource.data.bestScore is int
+                    && request.resource.data.bestScore > resource.data.bestScore
+                    && request.resource.data.maxBossKills is int
+                    && request.resource.data.maxBossKills >= 0;
+
+      allow delete: if false;
+    }
+  }
+}

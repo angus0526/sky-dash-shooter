@@ -136,5 +136,23 @@ export const ULTIMATE_BOSS_DAMAGE = 180;
 // Progress / unlocks
 export const MAX_BOSS_KILLS_STORAGE_KEY = 'skydash_max_boss_kills';
 
+// Player profile / save codes — per-name local record plus a portable "resume code" that
+// round-trips the same data so a player can pick up their progress on another device.
+export const PROFILE_STORAGE_PREFIX = 'skydash_profile_';
+export const ACTIVE_PROFILE_NAME_STORAGE_KEY = 'skydash_active_profile_name';
+export const PROFILE_CODE_VERSION = 1;
+
 // Audio
 export const MUTE_STORAGE_KEY = 'skydash_muted';
+
+// Multiplayer — Trystero (serverless WebRTC) via the same Firebase project as the
+// leaderboard. Non-linear difficulty curve indexed by connected player count (1-5),
+// applied to enemy/pickup spawn rate and boss HP/attack volume. Index 0 = solo (1.0x,
+// i.e. identical to today's single-player balance).
+export const MAX_PLAYERS = 5;
+export const PLAYER_COUNT_MULTIPLIER = [1.0, 1.5, 2.0, 2.5, 3.0];
+export const TRYSTERO_FIREBASE_APP_ID =
+  'https://sky-dash-shooter-default-rtdb.asia-southeast1.firebasedatabase.app';
+export const TRYSTERO_ROOM_PREFIX = 'sky-dash-shooter-room-';
+export const SNAPSHOT_INTERVAL_MS = 90;
+export const INPUT_SEND_INTERVAL_MS = 60;

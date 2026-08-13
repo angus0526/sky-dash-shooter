@@ -25,7 +25,8 @@ export class BossManager {
   private nextFireAt = 0;
   private encounterCount = 0;
 
-  constructor(scene: Phaser.Scene, spawner: Spawner) {
+  /** Player-count difficulty multiplier (1.0 in solo). Scales boss HP and per-volley bullet count — fight frequency is left unscaled so pacing stays predictable regardless of squad size. */
+  constructor(scene: Phaser.Scene, spawner: Spawner, private multiplier: number = 1) {
     this.scene = scene;
     this.spawner = spawner;
     this.boss = new Boss(scene);
@@ -54,7 +55,7 @@ export class BossManager {
     if (!this.active) {
       if (now >= this.nextBossAt) {
         this.active = true;
-        const maxHealth = BOSS_MAX_HEALTH_BASE + this.encounterCount * BOSS_MAX_HEALTH_GROWTH;
+        const maxHealth = (BOSS_MAX_HEALTH_BASE + this.encounterCount * BOSS_MAX_HEALTH_GROWTH) * this.multiplier;
         this.encounterCount++;
         this.boss.spawn(maxHealth);
         this.spawner.setPaused(true);
@@ -68,7 +69,7 @@ export class BossManager {
 
     if (now >= this.nextFireAt) {
       this.nextFireAt = now + BOSS_FIRE_INTERVAL_MS;
-      const count = Phaser.Math.Between(1, 3);
+      const count = Math.round(Phaser.Math.Between(1, 3) * this.multiplier);
       this.bulletPool.fire(this.boss.x, this.boss.y, playerX, playerY, count);
     }
   }

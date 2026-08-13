@@ -1,6 +1,9 @@
 import Phaser from 'phaser';
 
 export class Obstacle extends Phaser.Physics.Arcade.Sprite {
+  /** Read by multiplayer snapshot sync — the group itself never exposes size externally otherwise. */
+  big = false;
+
   constructor(scene: Phaser.Scene) {
     super(scene, 0, 0, 'obstacle');
     scene.add.existing(this);
@@ -10,6 +13,7 @@ export class Obstacle extends Phaser.Physics.Arcade.Sprite {
   }
 
   spawnAt(x: number, y: number, vx: number, big: boolean): void {
+    this.big = big;
     this.setTexture(big ? 'obstacle_big' : 'obstacle');
     this.setScale(big ? 0.55 : 0.85);
 

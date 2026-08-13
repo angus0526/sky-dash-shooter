@@ -3,6 +3,11 @@ import { BootScene } from './scenes/BootScene';
 import { GameScene } from './scenes/GameScene';
 import { UIScene } from './scenes/UIScene';
 import { GAME_HEIGHT, GAME_WIDTH } from './config/constants';
+import { migrateLegacyProgress } from './systems/PlayerProfile';
+import { initProfileOverlay } from './ui/ProfileOverlay';
+import { initRoomOverlay } from './ui/RoomOverlay';
+
+migrateLegacyProgress();
 
 const config: Phaser.Types.Core.GameConfig = {
   type: Phaser.AUTO,
@@ -30,7 +35,15 @@ const config: Phaser.Types.Core.GameConfig = {
   scene: [BootScene, GameScene, UIScene]
 };
 
-new Phaser.Game(config);
+const game = new Phaser.Game(config);
+
+const bootReady = new Promise<void>((resolve) => {
+  game.events.once('boot-ready', resolve);
+});
+
+Promise.all([initProfileOverlay(game).then(() => initRoomOverlay(game)), bootReady]).then(([session]) => {
+  game.scene.start('GameScene', { session });
+});
 
 const rotateOverlay = document.getElementById('rotate-overlay')!;
 

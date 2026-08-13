@@ -5,6 +5,8 @@ import { UltimateButton } from '../controls/UltimateButton';
 import { isTouchDevice } from '../controls/InputState';
 import { EVENTS, GameEvents } from '../systems/GameEvents';
 import { getMaxBossKills } from '../systems/Progress';
+import { encodeProfileCode, getActiveProfile, PlayerProfile } from '../systems/PlayerProfile';
+import { fetchTopScores } from '../systems/Leaderboard';
 import { PLANES, PlaneId, PlaneConfig } from '../config/planes';
 import {
   GAME_HEIGHT,
@@ -48,14 +50,20 @@ export class UIScene extends Phaser.Scene {
   private gameOverPanel!: Phaser.GameObjects.Container;
   private pausePanel!: Phaser.GameObjects.Container;
   private introPanel!: Phaser.GameObjects.Container;
+  private profilePanel!: Phaser.GameObjects.Container;
+  private leaderboardPanel!: Phaser.GameObjects.Container;
   private pauseButton!: { circle: Phaser.GameObjects.Arc; label: Phaser.GameObjects.Text };
   private muteButton!: { circle: Phaser.GameObjects.Arc; label: Phaser.GameObjects.Text };
+  private profileButton!: { circle: Phaser.GameObjects.Arc; label: Phaser.GameObjects.Text };
+  private leaderboardButton!: { circle: Phaser.GameObjects.Arc; label: Phaser.GameObjects.Text };
   private ultimateButton?: UltimateButton;
   private planeCards: PlaneCardRefs[] = [];
   private currentPlaneId: PlaneId = 'default';
   private paused = false;
   private muted = false;
   private ultimateReadyAt = 0;
+  private profilePanelPausedGame = false;
+  private leaderboardPanelPausedGame = false;
 
   /** A round, generously-sized touch target (mobile buttons were too small to hit reliably) with a centered icon. */
   private createIconButton(x: number, y: number, icon: string, onTap: () => void): { circle: Phaser.GameObjects.Arc; label: Phaser.GameObjects.Text } {
@@ -93,9 +101,14 @@ export class UIScene extends Phaser.Scene {
     this.sound.mute = this.muted;
     this.muteButton = this.createIconButton(78, btnY, this.muted ? '🔇' : '🔊', () => this.toggleMute());
 
+    let nextIconX = 128;
     if (this.sys.game.device.fullscreen.available) {
-      this.createIconButton(128, btnY, '⛶', () => this.toggleFullscreen());
+      this.createIconButton(nextIconX, btnY, '⛶', () => this.toggleFullscreen());
+      nextIconX += 50;
     }
+    this.profileButton = this.createIconButton(nextIconX, btnY, '🪪', () => this.toggleProfilePanel());
+    nextIconX += 50;
+    this.leaderboardButton = this.createIconButton(nextIconX, btnY, '🏆', () => this.toggleLeaderboardPanel());
 
     this.input.keyboard?.on('keydown-ESC', () => this.togglePause());
     this.input.keyboard?.on('keydown-Q', () => GameEvents.emit(EVENTS.ULTIMATE_REQUESTED));
@@ -161,9 +174,19 @@ export class UIScene extends Phaser.Scene {
     this.pausePanel = this.buildPausePanel();
     this.pausePanel.setVisible(false);
 
+    this.profilePanel = this.buildProfilePanel();
+    this.profilePanel.setVisible(false);
+
+    this.leaderboardPanel = this.buildLeaderboardPanel();
+    this.leaderboardPanel.setVisible(false);
+
     this.introPanel = this.buildIntroPanel();
     this.pauseButton.circle.setVisible(false);
     this.pauseButton.label.setVisible(false);
+    this.profileButton.circle.setVisible(false);
+    this.profileButton.label.setVisible(false);
+    this.leaderboardButton.circle.setVisible(false);
+    this.leaderboardButton.label.setVisible(false);
 
     GameEvents.on(EVENTS.SCORE_CHANGED, this.onScoreChanged, this);
     GameEvents.on(EVENTS.HEALTH_CHANGED, this.onHealthChanged, this);
@@ -226,6 +249,10 @@ export class UIScene extends Phaser.Scene {
       this.gameOverPanel.setVisible(false);
       this.pauseButton.circle.setVisible(true);
       this.pauseButton.label.setVisible(true);
+      this.profileButton.circle.setVisible(true);
+      this.profileButton.label.setVisible(true);
+      this.leaderboardButton.circle.setVisible(true);
+      this.leaderboardButton.label.setVisible(true);
       GameEvents.emit(EVENTS.RESTART_REQUESTED);
     });
 
@@ -287,6 +314,10 @@ export class UIScene extends Phaser.Scene {
       this.introPanel.setVisible(false);
       this.pauseButton.circle.setVisible(true);
       this.pauseButton.label.setVisible(true);
+      this.profileButton.circle.setVisible(true);
+      this.profileButton.label.setVisible(true);
+      this.leaderboardButton.circle.setVisible(true);
+      this.leaderboardButton.label.setVisible(true);
       this.scene.resume('GameScene');
     });
 
@@ -331,6 +362,217 @@ export class UIScene extends Phaser.Scene {
     const container = this.add.container(cx, cy, children);
     container.setDepth(50);
     return container;
+  }
+
+  private buildProfilePanel(): Phaser.GameObjects.Container {
+    const cx = GAME_WIDTH / 2;
+    const cy = GAME_HEIGHT / 2;
+
+    const bg = this.add.rectangle(0, 0, 460, 340, 0x0b0f1a, 0.94);
+    bg.setStrokeStyle(2, 0xfff275, 0.8);
+
+    const title = this.add.text(0, -145, '玩家紀錄', {
+      fontFamily: 'system-ui, sans-serif',
+      fontSize: '24px',
+      color: '#ffffff'
+    });
+    title.setOrigin(0.5);
+
+    const statsText = this.add.text(0, -95, '', {
+      fontFamily: 'system-ui, sans-serif',
+      fontSize: '15px',
+      color: '#e6ecff',
+      align: 'center',
+      lineSpacing: 8
+    });
+    statsText.setOrigin(0.5, 0);
+    statsText.setName('statsText');
+
+    const codeLabel = this.add.text(0, 5, '續玩代碼（其他裝置輸入姓名＋此代碼可還原進度）', {
+      fontFamily: 'system-ui, sans-serif',
+      fontSize: '12px',
+      color: '#8892b0',
+      align: 'center'
+    });
+    codeLabel.setOrigin(0.5);
+
+    const codeText = this.add.text(0, 30, '', {
+      fontFamily: 'monospace',
+      fontSize: '12px',
+      color: '#4fd1ff',
+      align: 'center',
+      wordWrap: { width: 420 }
+    });
+    codeText.setOrigin(0.5, 0);
+    codeText.setName('codeText');
+
+    const copyButton = this.add.rectangle(-100, 120, 180, 46, 0x4fd1ff, 0.9);
+    copyButton.setInteractive({ useHandCursor: true });
+    const copyButtonText = this.add.text(-100, 120, '複製代碼', {
+      fontFamily: 'system-ui, sans-serif',
+      fontSize: '16px',
+      color: '#0b0f1a'
+    });
+    copyButtonText.setOrigin(0.5);
+
+    const copyStatus = this.add.text(0, 150, '', {
+      fontFamily: 'system-ui, sans-serif',
+      fontSize: '12px',
+      color: '#39ff6a'
+    });
+    copyStatus.setOrigin(0.5);
+    copyStatus.setName('copyStatus');
+
+    copyButton.on('pointerdown', () => {
+      const code = codeText.text;
+      navigator.clipboard
+        ?.writeText(code)
+        .then(() => copyStatus.setText('已複製到剪貼簿'))
+        .catch(() => copyStatus.setText('複製失敗，請手動選取'));
+    });
+
+    const closeButton = this.add.rectangle(100, 120, 180, 46, 0xffffff, 0.08);
+    closeButton.setStrokeStyle(1, 0xffffff, 0.3);
+    closeButton.setInteractive({ useHandCursor: true });
+    const closeButtonText = this.add.text(100, 120, '關閉', {
+      fontFamily: 'system-ui, sans-serif',
+      fontSize: '16px',
+      color: '#e6ecff'
+    });
+    closeButtonText.setOrigin(0.5);
+    closeButton.on('pointerdown', () => this.closeProfilePanel());
+
+    const container = this.add.container(cx, cy, [
+      bg,
+      title,
+      statsText,
+      codeLabel,
+      codeText,
+      copyButton,
+      copyButtonText,
+      closeButton,
+      closeButtonText,
+      copyStatus
+    ]);
+    container.setDepth(50);
+    return container;
+  }
+
+  private refreshProfilePanel(profile: PlayerProfile): void {
+    const statsText = this.profilePanel.getByName('statsText') as Phaser.GameObjects.Text;
+    statsText.setText(
+      `姓名：${profile.name}\n最高分：${profile.bestScore}\n最近一局：${profile.lastScore}\n擊敗魔王數：${profile.maxBossKills}`
+    );
+
+    const codeText = this.profilePanel.getByName('codeText') as Phaser.GameObjects.Text;
+    codeText.setText(encodeProfileCode(profile));
+
+    const copyStatus = this.profilePanel.getByName('copyStatus') as Phaser.GameObjects.Text;
+    copyStatus.setText('');
+  }
+
+  private toggleProfilePanel(): void {
+    if (this.gameOverPanel.visible || this.introPanel.visible) return;
+    if (this.profilePanel.visible) {
+      this.closeProfilePanel();
+      return;
+    }
+
+    const profile = getActiveProfile();
+    if (!profile) return;
+    this.refreshProfilePanel(profile);
+
+    if (!this.paused) {
+      this.profilePanelPausedGame = true;
+      this.scene.pause('GameScene');
+    }
+    this.profilePanel.setVisible(true);
+  }
+
+  private closeProfilePanel(): void {
+    this.profilePanel.setVisible(false);
+    if (this.profilePanelPausedGame) {
+      this.profilePanelPausedGame = false;
+      this.scene.resume('GameScene');
+    }
+  }
+
+  private buildLeaderboardPanel(): Phaser.GameObjects.Container {
+    const cx = GAME_WIDTH / 2;
+    const cy = GAME_HEIGHT / 2;
+
+    const bg = this.add.rectangle(0, 0, 380, 380, 0x0b0f1a, 0.94);
+    bg.setStrokeStyle(2, 0x39ff6a, 0.8);
+
+    const title = this.add.text(0, -165, '排行榜（歷史最高分）', {
+      fontFamily: 'system-ui, sans-serif',
+      fontSize: '18px',
+      color: '#ffffff'
+    });
+    title.setOrigin(0.5);
+
+    const listText = this.add.text(0, -125, '', {
+      fontFamily: 'system-ui, sans-serif',
+      fontSize: '14px',
+      color: '#e6ecff',
+      align: 'left',
+      lineSpacing: 8
+    });
+    listText.setOrigin(0.5, 0);
+    listText.setName('leaderboardList');
+
+    const closeButton = this.add.rectangle(0, 155, 180, 46, 0xffffff, 0.08);
+    closeButton.setStrokeStyle(1, 0xffffff, 0.3);
+    closeButton.setInteractive({ useHandCursor: true });
+    const closeButtonText = this.add.text(0, 155, '關閉', {
+      fontFamily: 'system-ui, sans-serif',
+      fontSize: '16px',
+      color: '#e6ecff'
+    });
+    closeButtonText.setOrigin(0.5);
+    closeButton.on('pointerdown', () => this.closeLeaderboardPanel());
+
+    const container = this.add.container(cx, cy, [bg, title, listText, closeButton, closeButtonText]);
+    container.setDepth(50);
+    return container;
+  }
+
+  private toggleLeaderboardPanel(): void {
+    if (this.gameOverPanel.visible || this.introPanel.visible) return;
+    if (this.leaderboardPanel.visible) {
+      this.closeLeaderboardPanel();
+      return;
+    }
+
+    const listText = this.leaderboardPanel.getByName('leaderboardList') as Phaser.GameObjects.Text;
+    listText.setText('載入中...');
+
+    if (!this.paused) {
+      this.leaderboardPanelPausedGame = true;
+      this.scene.pause('GameScene');
+    }
+    this.leaderboardPanel.setVisible(true);
+
+    fetchTopScores()
+      .then((entries) => {
+        if (!this.leaderboardPanel.visible) return;
+        if (entries.length === 0) {
+          listText.setText('目前還沒有紀錄，快去搶頭香！');
+          return;
+        }
+        listText.setText(entries.map((e, i) => `${i + 1}. ${e.name} — ${e.bestScore}`).join('\n'));
+      })
+      .catch(() => {
+        if (this.leaderboardPanel.visible) listText.setText('讀取失敗，請稍後再試');
+      });
+  }
+
+  private closeLeaderboardPanel(): void {
+    this.leaderboardPanel.setVisible(false);
+    if (this.leaderboardPanelPausedGame) {
+      this.leaderboardPanelPausedGame = false;
+      this.scene.resume('GameScene');
+    }
   }
 
   private buildPlaneCard(plane: PlaneConfig, x: number, y: number): { card: Phaser.GameObjects.Container; refs: PlaneCardRefs } {
@@ -456,6 +698,12 @@ export class UIScene extends Phaser.Scene {
     this.gameOverPanel.setVisible(true);
     this.pauseButton.circle.setVisible(false);
     this.pauseButton.label.setVisible(false);
+    this.profileButton.circle.setVisible(false);
+    this.profileButton.label.setVisible(false);
+    this.leaderboardButton.circle.setVisible(false);
+    this.leaderboardButton.label.setVisible(false);
+    if (this.profilePanel.visible) this.closeProfilePanel();
+    if (this.leaderboardPanel.visible) this.closeLeaderboardPanel();
     if (this.paused) this.resumeGame();
   }
 }
