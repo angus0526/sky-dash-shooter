@@ -860,7 +860,17 @@ export class GameScene extends Phaser.Scene {
     // Snapshots only arrive every SNAPSHOT_INTERVAL_MS-ish over the network — easing every
     // ghost toward its latest known position each frame (rather than only moving them when
     // a snapshot lands) is what turns that into smooth motion instead of visible teleports.
-    this.ghosts?.tick(delta);
+    //
+    // Phaser's game loop re-arms its own requestAnimationFrame at the end of each step, so
+    // an uncaught throw anywhere in here doesn't just skip a frame — it can stop the loop
+    // from ever ticking again, which reads as the whole game (including the player's own
+    // ship) freezing solid. This is network-adjacent code (ghost state ultimately comes from
+    // another peer), so it gets a safety net the purely-local solo/host path doesn't need.
+    try {
+      this.ghosts?.tick(delta);
+    } catch (err) {
+      console.warn('[client] ghost tick failed', err);
+    }
 
     const input = this.gatherLocalInput();
     this.clientPlayer!.setMoveVector(input.moveX, input.moveY);
@@ -883,29 +893,37 @@ export class GameScene extends Phaser.Scene {
     this.clientNukes!.update();
   }
 
+  /** Runs from Trystero's own message-delivery callback, not from Phaser's update() loop —
+   * but it's still fed data from another peer's browser (which, thanks to the PWA's
+   * background auto-update, could in principle be running a slightly different build than
+   * this one), so the same "don't let one bad packet wedge the client" caution applies. */
   private applyClientSnapshot(snap: GameSnapshot): void {
-    this.score = snap.score;
-    this.clientBossKillsThisRun = snap.bossKillsThisRun;
-    GameEvents.emit(EVENTS.SCORE_CHANGED, this.score);
+    try {
+      this.score = snap.score;
+      this.clientBossKillsThisRun = snap.bossKillsThisRun;
+      GameEvents.emit(EVENTS.SCORE_CHANGED, this.score);
 
-    if (snap.ultimateReadyAt !== this.ultimateReadyAt) {
-      this.ultimateReadyAt = snap.ultimateReadyAt;
-      GameEvents.emit(EVENTS.ULTIMATE_STATE_CHANGED, this.ultimateReadyAt);
+      if (typeof snap.ultimateReadyAt === 'number' && snap.ultimateReadyAt !== this.ultimateReadyAt) {
+        this.ultimateReadyAt = snap.ultimateReadyAt;
+        GameEvents.emit(EVENTS.ULTIMATE_STATE_CHANGED, this.ultimateReadyAt);
+      }
+
+      this.ghosts?.apply(snap, getLocalPeerId());
+
+      const mine = snap.players[getLocalPeerId()];
+      if (mine) {
+        GameEvents.emit(EVENTS.HEALTH_CHANGED, { health: mine.health, maxHealth: mine.maxHealth });
+        GameEvents.emit(EVENTS.SHIELD_CHANGED, mine.shieldCharges);
+        this.clientWeaponSystem!.bulletLevel = mine.bulletLevel;
+        this.clientWeaponSystem!.laserLevel = mine.laserLevel;
+        this.clientWeaponSystem!.nukeLevel = mine.nukeLevel;
+        GameEvents.emit(EVENTS.WEAPON_CHANGED, { bullet: mine.bulletLevel, laser: mine.laserLevel, nuke: mine.nukeLevel });
+      }
+
+      if (snap.gameOver && !this.gameOver) this.triggerClientGameOver();
+    } catch (err) {
+      console.warn('[client] failed to apply snapshot', err);
     }
-
-    this.ghosts?.apply(snap, getLocalPeerId());
-
-    const mine = snap.players[getLocalPeerId()];
-    if (mine) {
-      GameEvents.emit(EVENTS.HEALTH_CHANGED, { health: mine.health, maxHealth: mine.maxHealth });
-      GameEvents.emit(EVENTS.SHIELD_CHANGED, mine.shieldCharges);
-      this.clientWeaponSystem!.bulletLevel = mine.bulletLevel;
-      this.clientWeaponSystem!.laserLevel = mine.laserLevel;
-      this.clientWeaponSystem!.nukeLevel = mine.nukeLevel;
-      GameEvents.emit(EVENTS.WEAPON_CHANGED, { bullet: mine.bulletLevel, laser: mine.laserLevel, nuke: mine.nukeLevel });
-    }
-
-    if (snap.gameOver && !this.gameOver) this.triggerClientGameOver();
   }
 
   private triggerClientGameOver(): void {
