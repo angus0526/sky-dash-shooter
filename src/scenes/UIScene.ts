@@ -157,10 +157,18 @@ export class UIScene extends Phaser.Scene {
       new ShootButton(this, fireX, fireY);
       this.ultimateButton = new UltimateButton(this, fireX, fireY - SHOOT_BUTTON_RADIUS - ULTIMATE_BUTTON_RADIUS - 24);
     } else {
+      // ShootButton itself is input-agnostic (Phaser unifies pointer events across touch
+      // and mouse) — it was only ever gated behind isTouchDevice because desktop had no
+      // use for the joystick/ultimate button alongside it. Showing just this one gives
+      // mouse users a clickable FIRE option without cluttering the rest of the desktop UI.
+      const fireX = GAME_WIDTH - SHOOT_BUTTON_RADIUS - 60;
+      const fireY = GAME_HEIGHT - SHOOT_BUTTON_RADIUS - 60;
+      new ShootButton(this, fireX, fireY);
+
       const hint = this.add.text(
         GAME_WIDTH / 2,
         GAME_HEIGHT - 20,
-        '方向鍵/WASD 移動　空白鍵 射擊（自動輔助瞄準）　Q 全螢幕核爆絕招　Esc 暫停',
+        '方向鍵/WASD 移動　空白鍵或點擊 FIRE 鍵射擊（自動輔助瞄準）　Q 全螢幕核爆絕招　Esc 暫停',
         { fontFamily: 'system-ui, sans-serif', fontSize: '14px', color: '#8892b0' }
       );
       hint.setOrigin(0.5, 1);
