@@ -2,8 +2,10 @@ import Phaser from 'phaser';
 import { GAME_HEIGHT, GAME_WIDTH, PLAYER_INVULN_MS, PLAYER_SPEED, PLAYER_START_X, PLAYER_START_Y, PLAYER_START_HEALTH } from '../config/constants';
 
 // The ship art points "up" (nose at the top); the game faces right, so every
-// displayed angle is offset by 90deg from the raw movement/tilt math below.
-const FACING_OFFSET_DEG = 90;
+// displayed angle is offset by 90deg from the raw movement/tilt math below. Exported so
+// GhostRenderer can apply the same correction to teammate sprites — those are plain Images,
+// not Player instances, so they'd otherwise render facing the raw (wrong) art direction.
+export const FACING_OFFSET_DEG = 90;
 
 const SHIELD_TEXTURE_BY_CHARGE: Record<number, string> = {
   1: 'shield_ring1',

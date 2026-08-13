@@ -223,6 +223,9 @@ export class GameScene extends Phaser.Scene {
         rig.moveY = input.moveY;
         rig.firing = input.firing;
       };
+      // A client has no local world to resolve its own ultimate against, so it asks the
+      // host — same cooldown gate as the local Q-key/UI path, just entered from the network.
+      this.session.onUltimateRequest = () => this.handleUltimateRequest();
     }
 
     const localRig = this.rigs.get(LOCAL_RIG_ID)!;
@@ -656,9 +659,20 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
-  /** Full-screen "ultimate" nuke — available to every plane regardless of loadout. Charges automatically on a fixed cooldown. Not available to multiplayer clients (no networked trigger for it yet). Guarded by scene.isPaused() because this is event-driven (from a UI tap or key press), not polled from update(), so a paused GameScene wouldn't otherwise stop it from firing. */
+  /** Full-screen "ultimate" nuke — available to every plane regardless of loadout, and a
+   * shared team cooldown (not per-player). Guarded by scene.isPaused() because this is
+   * event-driven (from a UI tap, key press, or network request), not polled from update(),
+   * so a paused GameScene wouldn't otherwise stop it from firing. */
   private handleUltimateRequest(): void {
-    if (!this.isAuthority || this.gameOver || this.scene.isPaused()) return;
+    if (this.gameOver || this.scene.isPaused()) return;
+
+    if (!this.isAuthority) {
+      // Clients have no local world to blast — the host is the one that actually resolves
+      // this and its next snapshot carries the updated cooldown back for our own HUD.
+      this.session?.sendUltimateRequest();
+      return;
+    }
+
     if (this.time.now < this.ultimateReadyAt) return;
 
     this.ultimateReadyAt = this.time.now + ULTIMATE_COOLDOWN_MS;
@@ -715,6 +729,7 @@ export class GameScene extends Phaser.Scene {
       score: this.score,
       gameOver: gameOverFlag,
       bossKillsThisRun: this.bossKillsThisRun,
+      ultimateReadyAt: this.ultimateReadyAt,
       players,
       targets: snapGroup(this.spawner.targets),
       obstacles: this.spawner.obstacles
@@ -842,6 +857,10 @@ export class GameScene extends Phaser.Scene {
 
   private updateClient(delta: number): void {
     this.starfield.update(CLIENT_STARFIELD_SCROLL_SPEED, delta);
+    // Snapshots only arrive every SNAPSHOT_INTERVAL_MS-ish over the network — easing every
+    // ghost toward its latest known position each frame (rather than only moving them when
+    // a snapshot lands) is what turns that into smooth motion instead of visible teleports.
+    this.ghosts?.tick(delta);
 
     const input = this.gatherLocalInput();
     this.clientPlayer!.setMoveVector(input.moveX, input.moveY);
@@ -868,6 +887,11 @@ export class GameScene extends Phaser.Scene {
     this.score = snap.score;
     this.clientBossKillsThisRun = snap.bossKillsThisRun;
     GameEvents.emit(EVENTS.SCORE_CHANGED, this.score);
+
+    if (snap.ultimateReadyAt !== this.ultimateReadyAt) {
+      this.ultimateReadyAt = snap.ultimateReadyAt;
+      GameEvents.emit(EVENTS.ULTIMATE_STATE_CHANGED, this.ultimateReadyAt);
+    }
 
     this.ghosts?.apply(snap, getLocalPeerId());
 

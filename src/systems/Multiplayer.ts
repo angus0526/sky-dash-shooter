@@ -65,6 +65,8 @@ export interface GameSnapshot {
   score: number;
   gameOver: boolean;
   bossKillsThisRun: number;
+  /** Shared team cooldown, same as solo — any player triggering it charges it for everyone. */
+  ultimateReadyAt: number;
   players: Record<string, PlayerSnap>;
   targets: EntitySnap[];
   obstacles: ObstacleSnap[];
@@ -88,10 +90,13 @@ export class MultiplayerSession {
   onInput: ((peerId: string, input: NetInput) => void) | null = null;
   onSnapshot: ((snap: GameSnapshot) => void) | null = null;
   onStart: ((roster: string[]) => void) | null = null;
+  /** Host-side only: fires when any client asks to trigger the shared ultimate. */
+  onUltimateRequest: ((peerId: string) => void) | null = null;
 
   private inputAction: TypedAction<NetInput>;
   private snapshotAction: TypedAction<GameSnapshot>;
   private startAction: TypedAction<string[]>;
+  private ultimateAction: TypedAction<null>;
 
   constructor(roomCode: string, isHost: boolean) {
     this.roomCode = roomCode;
@@ -111,6 +116,7 @@ export class MultiplayerSession {
     this.inputAction = this.room.makeAction('input') as unknown as TypedAction<NetInput>;
     this.snapshotAction = this.room.makeAction('snap') as unknown as TypedAction<GameSnapshot>;
     this.startAction = this.room.makeAction('start') as unknown as TypedAction<string[]>;
+    this.ultimateAction = this.room.makeAction('ult') as unknown as TypedAction<null>;
 
     this.room.onPeerJoin = (peerId) => {
       if (!this.peerIds.includes(peerId)) this.peerIds.push(peerId);
@@ -123,6 +129,7 @@ export class MultiplayerSession {
     this.inputAction.onMessage = (data, { peerId }) => this.onInput?.(peerId, data);
     this.snapshotAction.onMessage = (data) => this.onSnapshot?.(data);
     this.startAction.onMessage = (roster) => this.onStart?.(roster);
+    this.ultimateAction.onMessage = (_data, { peerId }) => this.onUltimateRequest?.(peerId);
   }
 
   /** Capped at MAX_PLAYERS purely for the difficulty table's range — Trystero itself doesn't enforce a room size limit. */
@@ -136,6 +143,11 @@ export class MultiplayerSession {
 
   broadcastSnapshot(snap: GameSnapshot): void {
     this.snapshotAction.send(snap);
+  }
+
+  /** Client-side only: asks the host to trigger the shared ultimate on its behalf — a client has no local world to resolve it against itself. */
+  sendUltimateRequest(): void {
+    this.ultimateAction.send(null);
   }
 
   broadcastStart(roster: string[]): void {
