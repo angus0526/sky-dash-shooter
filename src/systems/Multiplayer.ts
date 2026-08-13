@@ -11,6 +11,19 @@ interface TypedAction<T> {
  * solo mode (no Trystero session at all) can use the exact same map-keyed code path. */
 export const LOCAL_RIG_ID = '__local__';
 
+// STUN alone (Trystero's default) only establishes a direct peer connection when both
+// sides have "easy" NAT — it silently fails for common real-world cases like one phone on
+// mobile-carrier NAT, leaving peers stuck never discovering each other with no error
+// surfaced anywhere. These are the Open Relay Project's (openrelay.metered.ca) public
+// credentials — a well-known free TURN relay with no signup, widely used for exactly this
+// prototyping case; not a secret, safe to ship in the client bundle. Best-effort/no SLA, so
+// this isn't a guarantee, just a meaningfully better success rate than STUN-only.
+const TURN_SERVERS = [
+  { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
+  { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
+  { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' }
+];
+
 export interface NetInput {
   moveX: number;
   moveY: number;
@@ -86,7 +99,10 @@ export class MultiplayerSession {
     // Reuse the same Firebase app instance the leaderboard already initialized — letting
     // Trystero call its own initializeApp() here throws "Firebase App named '[DEFAULT]'
     // already exists", since both features share one Firebase project by design.
-    this.room = joinRoom({ appId: TRYSTERO_FIREBASE_APP_ID, relayConfig: { firebaseApp } }, TRYSTERO_ROOM_PREFIX + roomCode);
+    this.room = joinRoom(
+      { appId: TRYSTERO_FIREBASE_APP_ID, relayConfig: { firebaseApp }, turnConfig: TURN_SERVERS },
+      TRYSTERO_ROOM_PREFIX + roomCode
+    );
 
     // makeAction()'s generic requires an index-signature-bearing payload type (Trystero's
     // DataPayload), which plain interfaces like NetInput/GameSnapshot don't structurally
