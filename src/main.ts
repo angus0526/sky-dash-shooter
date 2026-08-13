@@ -41,7 +41,23 @@ const bootReady = new Promise<void>((resolve) => {
   game.events.once('boot-ready', resolve);
 });
 
-Promise.all([initProfileOverlay(game).then(() => initRoomOverlay(game)), bootReady]).then(([session]) => {
+// GameScene's create() fires its initial state-sync emits (score/health/weapon/...) the
+// moment it runs, and UIScene only picks those up if it has already registered its
+// GameEvents listeners by then. BootScene launches UIScene before emitting 'boot-ready',
+// but launch() only queues UIScene's own create() for the SceneManager's next pass — it
+// doesn't run synchronously. When BootScene alone gated the start (the old flow), UIScene
+// and GameScene were queued back-to-back from the same call and happened to land in the
+// same batch. Now that GameScene waits on the profile/room overlays (a human-timescale
+// delay with no fixed relationship to Phaser's own step cadence), that incidental ordering
+// can no longer be trusted — wait for UIScene to announce itself ready instead. This uses
+// game.events (not the UIScene instance's own emitter) because game.scene.getScene() isn't
+// guaranteed to return anything yet this early — only game.events is reliably available
+// immediately after `new Phaser.Game(config)`.
+const uiReady = new Promise<void>((resolve) => {
+  game.events.once('ui-ready', resolve);
+});
+
+Promise.all([initProfileOverlay(game).then(() => initRoomOverlay(game)), bootReady, uiReady]).then(([session]) => {
   game.scene.start('GameScene', { session });
 });
 

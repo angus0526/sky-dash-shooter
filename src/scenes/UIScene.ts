@@ -205,6 +205,14 @@ export class UIScene extends Phaser.Scene {
       GameEvents.off(EVENTS.GAME_OVER, this.onGameOver, this);
       GameEvents.off(EVENTS.ULTIMATE_STATE_CHANGED, this.onUltimateStateChanged, this);
     });
+
+    // Tells main.ts it's safe to start GameScene — its create() emits the initial
+    // score/health/weapon state the instant it runs, and that only reaches this scene if
+    // these GameEvents listeners above are already registered by then. A game-level event
+    // is used (rather than main.ts listening on this scene's own `this.events`) because
+    // `game.scene.getScene('UIScene')` isn't guaranteed to return anything yet immediately
+    // after `new Phaser.Game(config)` — only `game.events` is reliably available that early.
+    this.game.events.emit('ui-ready');
   }
 
   update(): void {

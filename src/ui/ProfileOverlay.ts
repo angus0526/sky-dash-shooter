@@ -34,31 +34,56 @@ export function initProfileOverlay(game: Phaser.Game): Promise<PlayerProfile> {
     overlay.classList.add('visible');
     nameInput.focus();
 
+    const finish = (profile: PlayerProfile) => {
+      overlay.classList.remove('visible');
+      statusText.classList.remove('success');
+      releaseCapture();
+      resolve(profile);
+    };
+
     const submit = () => {
       const name = nameInput.value.trim();
       if (!name) {
+        statusText.classList.remove('success');
         statusText.textContent = '請輸入姓名';
         return;
       }
 
       let profile: PlayerProfile;
+      let restored = false;
       const code = codeInput.value.trim();
       if (code) {
         const decoded = decodeProfileCode(code);
         if (!decoded) {
+          statusText.classList.remove('success');
           statusText.textContent = '代碼無效，請確認輸入正確';
           return;
         }
         decoded.name = name;
         profile = decoded;
+        restored = true;
       } else {
-        profile = getProfileByName(name) ?? createProfile(name);
+        const existingLocal = getProfileByName(name);
+        profile = existingLocal ?? createProfile(name);
+        restored = !!existingLocal && (existingLocal.bestScore > 0 || existingLocal.maxBossKills > 0);
       }
       setActiveProfile(profile);
 
-      overlay.classList.remove('visible');
-      releaseCapture();
-      resolve(profile);
+      // Silently proceeding straight into the game looks identical whether the restore
+      // actually worked or not — surface what got restored for a moment before continuing,
+      // instead of the player only being able to check via the in-game 🪪 panel.
+      if (restored && (profile.bestScore > 0 || profile.maxBossKills > 0)) {
+        statusText.classList.add('success');
+        statusText.textContent = `已還原紀錄：最高分 ${profile.bestScore}、擊敗魔王 ${profile.maxBossKills} 次`;
+        startBtn.setAttribute('disabled', 'true');
+        setTimeout(() => {
+          startBtn.removeAttribute('disabled');
+          finish(profile);
+        }, 1400);
+        return;
+      }
+
+      finish(profile);
     };
 
     startBtn.addEventListener('click', submit);
