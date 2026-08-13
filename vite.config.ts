@@ -20,6 +20,10 @@ export default defineConfig({
   plugins: [
     VitePWA({
       registerType: 'autoUpdate',
+      // Registered manually from main.ts instead (via the virtual:pwa-register module) so
+      // we can force an actual page reload when a new version takes over — see the comment
+      // there for why the default auto-injected registration isn't enough on its own.
+      injectRegister: false,
       includeAssets: ['icons/*.png', 'assets/images/*.png', 'assets/audio/*.ogg'],
       workbox: {
         // Workbox's default per-file precache limit is 2MB — music_normal.ogg (3.3MB) was

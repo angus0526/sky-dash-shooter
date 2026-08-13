@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { registerSW } from 'virtual:pwa-register';
 import { BootScene } from './scenes/BootScene';
 import { GameScene } from './scenes/GameScene';
 import { UIScene } from './scenes/UIScene';
@@ -6,6 +7,18 @@ import { GAME_HEIGHT, GAME_WIDTH } from './config/constants';
 import { migrateLegacyProgress } from './systems/PlayerProfile';
 import { initProfileOverlay } from './ui/ProfileOverlay';
 import { initRoomOverlay } from './ui/RoomOverlay';
+
+// The default auto-injected SW registration (registerType: 'autoUpdate' with the plugin's
+// own injectRegister) only ever calls navigator.serviceWorker.register() — a new version
+// activates itself in the background, but an already-open page keeps running its old
+// in-memory JS indefinitely; nothing reloads it. That's rarely noticed in a plain browser
+// tab (people naturally reload/reopen those often), but installed/standalone launches —
+// a Chrome "Install app" PWA, or an iOS Shortcuts.app home-screen icon — can sit open for
+// days, silently drifting out of sync with whatever a freshly-loaded peer is running. Two
+// multiplayer peers on different code versions is exactly the kind of protocol mismatch
+// that can wedge the game the instant they try to sync state. registerSW() from
+// virtual:pwa-register reloads the page itself once a new service worker takes over.
+registerSW({ immediate: true });
 
 migrateLegacyProgress();
 
