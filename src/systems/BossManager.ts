@@ -21,7 +21,8 @@ export class BossManager {
 
   private scene: Phaser.Scene;
   private spawner: Spawner;
-  private nextBossAt: number;
+  /** Null until the first real update() tick — see that method for why. */
+  private nextBossAt: number | null = null;
   private nextFireAt = 0;
   private encounterCount = 0;
 
@@ -31,7 +32,6 @@ export class BossManager {
     this.spawner = spawner;
     this.boss = new Boss(scene);
     this.bulletPool = new BossBulletPool(scene);
-    this.nextBossAt = scene.time.now + this.randomBossDelay();
   }
 
   private randomBossDelay(): number {
@@ -51,6 +51,15 @@ export class BossManager {
   update(playerX: number, playerY: number): void {
     const now = this.scene.time.now;
     this.bulletPool.update();
+
+    if (this.nextBossAt === null) {
+      // Anchored to the first real gameplay tick rather than construction time (which runs
+      // during GameScene.create(), before the player has even dismissed the intro panel) —
+      // otherwise time spent sitting on that screen (or, worse, waiting in a multiplayer
+      // lobby for a friend to join) counts toward the boss's countdown, and a slow start
+      // can make the boss already "due" the instant play actually begins.
+      this.nextBossAt = now + this.randomBossDelay();
+    }
 
     if (!this.active) {
       if (now >= this.nextBossAt) {

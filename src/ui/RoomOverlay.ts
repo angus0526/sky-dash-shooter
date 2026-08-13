@@ -83,12 +83,27 @@ export function initRoomOverlay(game: Phaser.Game): Promise<MultiplayerSession |
         startBtn.style.display = '';
         startBtn.addEventListener('click', () => {
           const roster = [getLocalPeerId(), ...session!.peerIds];
-          session!.broadcastStart(roster);
+          // Peer presence (onPeerJoin firing, the peer count going up) isn't necessarily the
+          // same moment its WebRTC data channel is fully warmed up for sending — a single
+          // send() right as the host clicks start can go out just ahead of that, and get
+          // lost. Resending a few times over the next ~1.5s costs nothing (the client side
+          // below just resolves once, so repeats are harmless) and covers that gap.
+          [0, 400, 900, 1500].forEach((delayMs) => {
+            setTimeout(() => session!.broadcastStart(roster), delayMs);
+          });
           finish(session);
         });
       } else {
         lobbyStatus.textContent = '已連線，等待房主開始遊戲...';
         session.onStart = () => finish(session);
+
+        // Pure UX safety net — this can't distinguish "host hasn't clicked start yet" from
+        // "the start message got lost", so it only ever adds a hint, never gives up on its
+        // own; the resend above is what actually mitigates the lost-message case.
+        setTimeout(() => {
+          if (!overlay.classList.contains('visible')) return;
+          lobbyStatus.textContent = '已連線，等待房主開始遊戲...（等太久的話，可能是連線不穩，請房主重新整理頁面再建一次房間）';
+        }, 10000);
       }
     };
 
