@@ -31,6 +31,13 @@ export interface NetInput {
 }
 
 export interface EntitySnap {
+  /** Every pool slot is always sent (never omitted/null) so array index stays a stable
+   * identity across snapshots — see GameSnapshot's field comment. This flag is how a slot
+   * currently holding no real object is marked, instead of using `null` in the array: mixed
+   * object/null arrays are exactly the kind of shape that's easy to mangle in transit
+   * through a serialization layer this project doesn't control (Trystero's own wire format,
+   * not plain JSON.stringify) — a uniform array of same-shaped objects is a safer bet. */
+  active: boolean;
   x: number;
   y: number;
 }
@@ -68,17 +75,17 @@ export interface GameSnapshot {
   /** Shared team cooldown, same as solo — any player triggering it charges it for everyone. */
   ultimateReadyAt: number;
   players: Record<string, PlayerSnap>;
-  // Fixed-length, one entry per pool slot (null where that slot is currently inactive) —
-  // NOT compacted down to just the active ones. Array index is the only identity a client
-  // has for "which real object is this" across successive snapshots; if inactive slots were
-  // filtered out, every spawn/despawn elsewhere in the pool would shift every later index,
-  // and the client would smoothly ease each ghost toward what is actually a *different*
-  // real object's position — read as enemies/pickups flying erratically around the screen.
-  targets: (EntitySnap | null)[];
-  obstacles: (ObstacleSnap | null)[];
-  pickups: (PickupSnap | null)[];
+  // Fixed-length, one entry per pool slot (see EntitySnap.active) — NOT compacted down to
+  // just the active ones. Array index is the only identity a client has for "which real
+  // object is this" across successive snapshots; if inactive slots were filtered out, every
+  // spawn/despawn elsewhere in the pool would shift every later index, and the client would
+  // smoothly ease each ghost toward what is actually a *different* real object's position —
+  // read as enemies/pickups flying erratically around the screen.
+  targets: EntitySnap[];
+  obstacles: ObstacleSnap[];
+  pickups: PickupSnap[];
   boss: BossSnap | null;
-  bossBullets: (EntitySnap | null)[];
+  bossBullets: EntitySnap[];
 }
 
 /** One Trystero room for one co-op run. The room creator is host (an app-level convention —

@@ -1,7 +1,29 @@
+import { execSync } from 'node:child_process';
 import { defineConfig } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
 
+// Shown on the first screen (see ProfileOverlay) so a stale cached/installed instance is
+// visually obvious instead of silently running old code — exactly the class of bug that's
+// bitten multiplayer testing (two peers on different builds talking a protocol mismatch).
+function getGitShortHash(): string {
+  try {
+    return execSync('git rev-parse --short HEAD').toString().trim();
+  } catch {
+    return 'unknown';
+  }
+}
+
+function getBuildTimestamp(): string {
+  const d = new Date();
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 export default defineConfig({
+  define: {
+    __BUILD_VERSION__: JSON.stringify(getGitShortHash()),
+    __BUILD_TIME__: JSON.stringify(getBuildTimestamp())
+  },
   // Relative asset paths — required for the Electron desktop build, which loads
   // dist/index.html directly via file:// (absolute "/assets/..." paths resolve to the
   // filesystem root and 404 under file://). Also safe for the normal web deploy, since

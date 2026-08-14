@@ -20,6 +20,14 @@ import { initRoomOverlay } from './ui/RoomOverlay';
 // virtual:pwa-register reloads the page itself once a new service worker takes over.
 registerSW({ immediate: true });
 
+// Shown on the profile screen (the very first thing rendered) so a stale cached/installed
+// instance is visually obvious instead of silently running old code — see the registerSW
+// comment above for why that's specifically bitten multiplayer testing in the past.
+const buildInfoEl = document.getElementById('build-info');
+if (buildInfoEl) {
+  buildInfoEl.textContent = `build ${__BUILD_VERSION__} · ${__BUILD_TIME__}`;
+}
+
 migrateLegacyProgress();
 
 const config: Phaser.Types.Core.GameConfig = {

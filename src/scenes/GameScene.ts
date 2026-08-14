@@ -20,7 +20,7 @@ import { getMaxBossKills, recordBossKills } from '../systems/Progress';
 import { getActiveProfile, recordRunScore } from '../systems/PlayerProfile';
 import { submitScore } from '../systems/Leaderboard';
 import { GhostRenderer } from '../systems/GhostRenderer';
-import { GameSnapshot, getLocalPeerId, LOCAL_RIG_ID, MultiplayerSession, NetInput } from '../systems/Multiplayer';
+import { EntitySnap, GameSnapshot, getLocalPeerId, LOCAL_RIG_ID, MultiplayerSession, NetInput } from '../systems/Multiplayer';
 import { EVENTS, GameEvents } from '../systems/GameEvents';
 import { InputState } from '../controls/InputState';
 import { PlaneId, getPlane } from '../config/planes';
@@ -59,13 +59,13 @@ function scaleDamage(base: number, level: number): number {
   return base * (1 + (level - 1) * WEAPON_DAMAGE_GROWTH_PER_LEVEL);
 }
 
-// Preserves each pool slot's index (null when inactive) rather than compacting down to only
-// the active members — see the GameSnapshot fields' doc comment in Multiplayer.ts for why
-// filtering breaks stable per-object identity across snapshots.
-function snapGroup(group: Phaser.Physics.Arcade.Group): ({ x: number; y: number } | null)[] {
+// Preserves each pool slot's index (active: false when inactive) rather than compacting
+// down to only the active members — see the GameSnapshot fields' doc comment in
+// Multiplayer.ts for why filtering breaks stable per-object identity across snapshots.
+function snapGroup(group: Phaser.Physics.Arcade.Group): EntitySnap[] {
   return group.getChildren().map((o) => {
     const sprite = o as Phaser.Physics.Arcade.Sprite;
-    return sprite.active ? { x: sprite.x, y: sprite.y } : null;
+    return { active: sprite.active, x: sprite.x, y: sprite.y };
   });
 }
 
@@ -734,11 +734,11 @@ export class GameScene extends Phaser.Scene {
       targets: snapGroup(this.spawner.targets),
       obstacles: this.spawner.obstacles.getChildren().map((o) => {
         const obstacle = o as Obstacle;
-        return obstacle.active ? { x: obstacle.x, y: obstacle.y, big: obstacle.big } : null;
+        return { active: obstacle.active, x: obstacle.x, y: obstacle.y, big: obstacle.big };
       }),
       pickups: this.spawner.pickups.getChildren().map((p) => {
         const pickup = p as Pickup;
-        return pickup.active ? { x: pickup.x, y: pickup.y, type: pickup.pickupType } : null;
+        return { active: pickup.active, x: pickup.x, y: pickup.y, type: pickup.pickupType };
       }),
       boss:
         this.bossManager.active && this.bossManager.boss.active

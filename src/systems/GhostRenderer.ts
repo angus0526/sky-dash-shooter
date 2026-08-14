@@ -25,7 +25,7 @@ function smoothingFactor(deltaMs: number): number {
   return 1 - Math.exp(-deltaMs / SMOOTHING_TAU_MS);
 }
 
-class SimplePool<T extends { x: number; y: number }> {
+class SimplePool<T extends { active: boolean; x: number; y: number }> {
   private sprites: Phaser.GameObjects.Image[] = [];
   private targetX: number[] = [];
   private targetY: number[] = [];
@@ -49,14 +49,15 @@ class SimplePool<T extends { x: number; y: number }> {
     }
   }
 
-  /** `entries[i]` must always refer to the same real pool slot across calls (null when that
-   * slot is inactive) — this is the client's only notion of "which object is this", so an
-   * index that means something different each call reads as that ghost teleporting/flying
-   * to an unrelated position instead of representing its own object smoothly moving. */
-  sync(entries: (T | null)[]): void {
+  /** `entries[i]` must always refer to the same real pool slot across calls (`active: false`
+   * when that slot currently holds nothing) — this is the client's only notion of "which
+   * real object is this", so an index that means something different each call reads as
+   * that ghost teleporting/flying to an unrelated position instead of representing its own
+   * object smoothly moving. */
+  sync(entries: T[]): void {
     this.sprites.forEach((sprite, i) => {
       const entry = entries[i];
-      if (!entry) {
+      if (!entry || !entry.active) {
         sprite.setVisible(false);
         return;
       }
@@ -98,10 +99,10 @@ interface GhostPlayer {
  * Player elsewhere (for responsive local movement), never one of these ghosts.
  */
 export class GhostRenderer {
-  private targets: SimplePool<{ x: number; y: number }>;
-  private obstacles: SimplePool<{ x: number; y: number; big: boolean }>;
-  private pickups: SimplePool<{ x: number; y: number; type: string }>;
-  private bossBullets: SimplePool<{ x: number; y: number }>;
+  private targets: SimplePool<{ active: boolean; x: number; y: number }>;
+  private obstacles: SimplePool<{ active: boolean; x: number; y: number; big: boolean }>;
+  private pickups: SimplePool<{ active: boolean; x: number; y: number; type: string }>;
+  private bossBullets: SimplePool<{ active: boolean; x: number; y: number }>;
   private boss: Phaser.GameObjects.Image;
   private bossTargetX = 0;
   private bossTargetY = 0;
@@ -146,12 +147,7 @@ export class GhostRenderer {
     return ghost;
   }
 
-  apply(snap: GameSnapshot, localPeerId: string): void {
-    this.targets.sync(snap.targets);
-    this.obstacles.sync(snap.obstacles);
-    this.pickups.sync(snap.pickups);
-    this.bossBullets.sync(snap.bossBullets);
-
+  private applyBoss(snap: GameSnapshot): void {
     if (snap.boss) {
       if (!this.boss.visible) this.boss.setPosition(snap.boss.x, snap.boss.y);
       this.bossTargetX = snap.boss.x;
@@ -160,7 +156,9 @@ export class GhostRenderer {
     } else {
       this.boss.setVisible(false);
     }
+  }
 
+  private applyPlayers(snap: GameSnapshot, localPeerId: string): void {
     const seenPeers = new Set<string>();
     for (const [peerId, playerSnap] of Object.entries(snap.players)) {
       if (peerId === localPeerId) continue;
@@ -174,6 +172,43 @@ export class GhostRenderer {
     this.otherPlayers.forEach((ghost, peerId) => {
       if (!seenPeers.has(peerId)) ghost.sprite.setVisible(false);
     });
+  }
+
+  /** Each category is independent and wrapped separately — a malformed/unexpected entry in
+   * one (say targets, if the field ever manages to be `undefined` after a codec round-trip
+   * this project doesn't fully control) shouldn't take the boss and every teammate down
+   * with it just because they happen to be processed in the same snapshot. */
+  apply(snap: GameSnapshot, localPeerId: string): void {
+    try {
+      this.applyBoss(snap);
+    } catch (err) {
+      console.warn('[ghosts] boss sync failed', err);
+    }
+    try {
+      this.applyPlayers(snap, localPeerId);
+    } catch (err) {
+      console.warn('[ghosts] player sync failed', err);
+    }
+    try {
+      this.targets.sync(snap.targets);
+    } catch (err) {
+      console.warn('[ghosts] target sync failed', err);
+    }
+    try {
+      this.obstacles.sync(snap.obstacles);
+    } catch (err) {
+      console.warn('[ghosts] obstacle sync failed', err);
+    }
+    try {
+      this.pickups.sync(snap.pickups);
+    } catch (err) {
+      console.warn('[ghosts] pickup sync failed', err);
+    }
+    try {
+      this.bossBullets.sync(snap.bossBullets);
+    } catch (err) {
+      console.warn('[ghosts] boss-bullet sync failed', err);
+    }
   }
 
   /** Eases every visible ghost toward its latest snapshot position — call once per frame from GameScene's client update loop, not just when a snapshot arrives, or motion looks like teleporting between each ~90ms update instead of smooth movement. */
